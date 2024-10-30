@@ -1,13 +1,22 @@
 # How to Run?
 
-### If not build already, run 'make build' first (make sure the requirements are installed).
+## Install requirements mentioned in requirements.txt (Better to run in a virtual environment)
 
-## Open terminal in build directory
+## Go to build directory.
+
+### If not build already, run 'make build' first.
+
+## Run server.py in the server machine. (User your server ip)
+## Run client.py in the client machine to connect to the server. (Update your server ip in the client.py file) (Clients only need the client.py file in their machines.)
+
+## After Connection, Clients can execute the commands from their machine.
 
 ### Do the setup:
 ```bash
 ./setup <your_password> <logfilename>
 ```
+(Logfile file names such as dot dot dot (...) or slash slash slash (///) without any other alphanumeric characters are not allowed.)
+
 ### Now you can read and write entries in the logfile using your password.
 
 #### Possible Commands:
