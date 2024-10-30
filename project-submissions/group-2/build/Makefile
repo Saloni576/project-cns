@@ -8,15 +8,14 @@ KEY_FILE = secret.key
 # Default build target (run all steps in one go)
 .PHONY: build
 build: clean keyfile executables
-	@echo "Build complete. Starting server..."
-	python3 server.py
+	@echo "Build complete. Run server.py now."
 
 # Step 1: Generate the secret.key if it doesn't exist
 .PHONY: keyfile
 keyfile: 
 	@if [ ! -f "$(KEY_FILE)" ]; then \
 		echo "Generating $(KEY_FILE)..."; \
-		python3 setup.py dummy_password dummy_logfile; \
+		python3 setup.py dummypassword dummy_logfile; \
 	else \
 		echo "$(KEY_FILE) already exists."; \
 	fi
