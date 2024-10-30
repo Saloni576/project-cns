@@ -18,20 +18,61 @@ using namespace std;
 
 void transaction_window(SSL *ssl);
 void log_message(const string &message);
-#define SERVER_PORT 8080
-#define SERVER_IP "127.0.0.1"
 #define PUBLIC_KEY_FILE "../../certs/public_key.pem"
 
 string session_token; 
 SSL *ssl_global; 
 
-
-void log_message(const string &message) {
-    cout << "[INFO] " << message << "\n";
-}
+string server_ip = "127.0.0.1";  // Default to localhost
+int server_port = 8080;          // Default port
 
 void log_error(const string &message) {
     cerr << "[ERROR] " << message << "\n";
+}
+
+void get_server_details() {
+    cout << "Enter server IP (default: 127.0.0.1): ";
+    string input_ip;
+    getline(cin, input_ip);
+    
+    if (!input_ip.empty()) {
+        struct sockaddr_in sa;
+        if (inet_pton(AF_INET, input_ip.c_str(), &(sa.sin_addr)) != 1) {
+            log_error("Invalid IP format. Using default: 127.0.0.1");
+            server_ip = "127.0.0.1";
+        } else {
+            server_ip = input_ip;
+        }
+    } else {
+        server_ip = "127.0.0.1";
+    }
+
+    cout << "Enter server port (default: 8080): ";
+    string input_port;
+    getline(cin, input_port);
+    
+    if (!input_port.empty()) {
+        try {
+            int port = stoi(input_port);
+            if (port > 0 && port < 65536) {
+                server_port = port;
+            } else {
+                log_error("Invalid port number (must be between 1-65535). Using default: 8080");
+                server_port = 8080;
+            }
+        } catch (const exception&) {
+            log_error("Invalid port format. Using default: 8080");
+            server_port = 8080;
+        }
+    } else {
+        server_port = 8080;
+    }
+
+    log_message("Connecting to server at " + server_ip + ":" + to_string(server_port));
+}
+
+void log_message(const string &message) {
+    cout << "[INFO] " << message << "\n";
 }
 
 
@@ -106,38 +147,87 @@ SSL_CTX *create_ssl_context() {
         ERR_print_errors_fp(stderr);
         exit(EXIT_FAILURE);
     }
+
+    // Load the CA certificate
+    if (!SSL_CTX_load_verify_locations(ctx, "../../certs/ca_cert.pem", NULL)) {
+        log_error("Failed to load CA certificate");
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    // Load client certificate and private key
+    if (SSL_CTX_use_certificate_file(ctx, "../../certs/client_cert.pem", SSL_FILETYPE_PEM) <= 0) {
+        log_error("Failed to load client certificate");
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    if (SSL_CTX_use_PrivateKey_file(ctx, "../../certs/client_key.pem", SSL_FILETYPE_PEM) <= 0) {
+        log_error("Failed to load client private key");
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+
     return ctx;
 }
 
+int create_socket() {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) {
+        log_error("Socket creation failed");
+        return -1;
+    }
+
+    sockaddr_in serv_addr;
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(server_port);
+
+    if (inet_pton(AF_INET, server_ip.c_str(), &serv_addr.sin_addr) <= 0) {
+        log_error("Invalid address/Address not supported");
+        return -1;
+    }
+
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        log_error("Connection Failed");
+        return -1;
+    }
+
+    return sock;
+}
 
 SSL *establish_ssl_connection(SSL_CTX *ctx) {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
-        log_error("Failed to create socket");
+        log_error("Socket creation failed");
         return nullptr;
     }
 
-    sockaddr_in server_addr;
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(SERVER_PORT);
-    inet_pton(AF_INET, SERVER_IP, &server_addr.sin_addr);
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(server_port);
+    
+    if (inet_pton(AF_INET, server_ip.c_str(), &addr.sin_addr) <= 0) {
+        log_error("Invalid address/Address not supported");
+        close(sock);
+        return nullptr;
+    }
 
-    if (connect(sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-        log_error("Failed to connect to server");
+    if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        log_error("Connection failed to " + server_ip + ":" + to_string(server_port));
         close(sock);
         return nullptr;
     }
 
     SSL *ssl = SSL_new(ctx);
     SSL_set_fd(ssl, sock);
-    if (SSL_connect(ssl) <= 0) {
+
+    if (SSL_connect(ssl) != 1) {
         log_error("SSL connection failed");
         SSL_free(ssl);
         close(sock);
         return nullptr;
     }
 
-    log_message("SSL connection established");
     return ssl;
 }
 
@@ -197,7 +287,15 @@ void create_account(SSL *ssl) {
     string username, password, initial_amount_str;
 
     cout << "Enter username: ";
-    cin >> username;
+    cin.ignore(); // Clear any leftover newlines
+    getline(cin, username);
+    
+    // Check for spaces in username
+    if (username.find(' ') != string::npos) {
+        log_error("ERROR 255 - Username cannot contain spaces");
+        return;
+    }
+
     cout << "Enter password: ";
     cin >> password;
     cout << "Enter initial amount (format: X.XX): ";
@@ -298,7 +396,15 @@ void login(SSL *ssl) {
     string username, password, card_id, account_number;
 
     cout << "Enter username: ";
-    cin >> username;
+    cin.ignore(); // Clear any leftover newlines
+    getline(cin, username);
+    
+    // Check for spaces in username
+    if (username.find(' ') != string::npos) {
+        log_error("ERROR 255 - Username cannot contain spaces");
+        return;
+    }
+
     cout << "Enter password: ";
     cin >> password;
     cout << "Enter card ID: ";
@@ -399,7 +505,7 @@ void transaction_window(SSL *ssl) {
 
                 try {
                     double amt = stod(amount_str);
-                    if (amt < 0.00 || amt > 4294967295.99) {
+                    if (amt <= 0.00 || amt > 4294967295.99) {
                         log_error("ERROR 255 - due to amount out of range (0.00 to 4294967295.99)");
                         continue;
                     }
@@ -427,7 +533,7 @@ void transaction_window(SSL *ssl) {
 
                 try {
                     double amt = stod(amount_str);
-                    if (amt < 0.00 || amt > 4294967295.99) {
+                    if (amt <= 0.00 || amt > 4294967295.99) {
                         log_error("ERROR 255 - due to amount out of range (0.00 to 4294967295.99)");
                         continue;
                     }
@@ -452,7 +558,7 @@ void transaction_window(SSL *ssl) {
         int bytes_read = SSL_read(ssl, buffer, sizeof(buffer));
         if (bytes_read <= 0) {
             log_error("ERROR 255 - Failed to read server response");
-            continue;
+            return;
         }
         string response(buffer, bytes_read);
 
@@ -537,11 +643,12 @@ void transaction_window(SSL *ssl) {
     }
 }
 
-
-
 int main() {
     SSL_CTX *ctx = create_ssl_context();
     signal(SIGINT, handle_sigint);
+    
+    get_server_details();
+
     while (true) {
         SSL *ssl = establish_ssl_connection(ctx);
         if (!ssl) return -1;
@@ -594,10 +701,4 @@ int main() {
 
     SSL_CTX_free(ctx);
     return 0;
-}
-
-
-
-bool is_valid_amount_range(double amount) {
-    return amount >= 0.00 && amount <= 4294967295.99;
 }
