@@ -194,7 +194,7 @@ void check_req_args(string &error)
     }
     if (USER_CARD == "")
     {
-        error += "User authentication failed! Missing argument -c [...] \n";
+        USER_CARD = ACCOUNT+".card";
     }
     if (MODE == '-')
     {
