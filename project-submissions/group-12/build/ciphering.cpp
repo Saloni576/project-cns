@@ -40,33 +40,56 @@ long long int decrypt(int encrpyted_text)
     }
     return decrypted;
 }
+
+vector<int> encoder(string message)
+{
+    vector<int> form;
+    // calling the encrypting function in encoding function
+    for (auto& letter : message)
+        form.push_back(encrypt((int)letter));
+    return form;
+}
+string decoder(vector<int> encoded)
+{
+    string s;
+    // calling the decrypting function decoding function
+    for (auto& num : encoded)
+        s += decrypt(num);
+    return s;
+}
+
 string str_encription(string message)
 {
-    string ans = "";
-    for (auto& letter : message){
-        long long int temp = encrypt((int)letter);
-        ans += to_string(temp);
-        ans += 'e';
+    vector<int> temp =encoder(message);
+    string temp1 ="";
+    for(int i : temp){
+        string res =to_string(i);
+        temp1 +=to_string(res.size()) +res;
     }
-
-    return ans;
+    return temp1;
 }
 string str_decription(string encoded)
 {
-    string s;
-    string temp = "";
-    for (auto& num : encoded){
-
-        if(num == 'e'){
-            long long int val = stoi(temp);
-            s += decrypt(val);
-            temp = " ";
-        }else{
-            temp += num;
-        }
+    if(encoded.empty()){
+        return "";
     }
-        
-    return s;
+    int cnt =encoded[0]-'0';
+    cout << cnt << endl;
+    int i =1;
+    vector<int> val;
+    string temp ="";
+    while(i<=encoded.size()){
+        if(cnt==0){
+            cnt =encoded[i]-'0';
+            val.push_back(stoi(temp));
+            temp ="";
+        }else{
+            temp +=encoded[i];
+            cnt--;
+        }
+        i++;
+    }
+    return decoder(val);
 }
 vector<string> str_break_I(vector<string> &tokens){
     vector<string> v1(3);

@@ -149,7 +149,7 @@ bool input_validation(string &s) {
                     return false;
                 }
                 if(tokens[i+1]=="0") return false;
-                if(stoi(tokens[i+1])>1073741823) return false;
+                if(stoll(tokens[i+1])>1073741823ll) return false;
                 hasTimestamp = true;
                 i++;
             } else if (token == "-K") {
@@ -174,6 +174,7 @@ bool input_validation(string &s) {
                 if (i + 1 >= tokens.size() || !is_valid_number(tokens[i+1])){
                     return false;
                 }
+                if(stoll(tokens[i+1])>1073741823ll) return false;
                 i++;
             } else {
                 if(hasLogFile==true) return false;

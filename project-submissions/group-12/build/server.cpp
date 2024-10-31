@@ -1,10 +1,11 @@
 #include <bits/stdc++.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 #include "ciphering.cpp"
-//#include <winsock2.h>
 #include <filesystem>
-#include "sha256.cpp"
+#include "sha256.cpp" // Comment out the SHA-256 include
 using namespace std;
 
 #define PORT 8080
@@ -400,119 +401,144 @@ pair<bool,string> user_key(string file_path){
     }
     return {false,"NA"};
 }
-void Server(){
 
-    int server_fd, new_socket;
-    struct sockaddr_in address;
-    char buffer[BUFFER_SIZE];
-    socklen_t addr_len = sizeof(address);
+void initialize_openssl() {
+    SSL_load_error_strings();
+    OpenSSL_add_ssl_algorithms();
+}
 
-    // Create TCP socket
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
-    {
-        perror("Socket creation failed");
-        return ;
+void cleanup_openssl() {
+    EVP_cleanup();
+}
+
+SSL_CTX *create_context() {
+    const SSL_METHOD *method;
+    SSL_CTX *ctx;
+
+    method = TLS_server_method(); // Use TLS_server_method for compatibility
+
+    ctx = SSL_CTX_new(method);
+    if (!ctx) {
+        perror("Unable to create SSL context");
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
     }
 
-    // Server address setup
-    memset(&address, 0, sizeof(address));
+    return ctx;
+}
+
+void configure_context(SSL_CTX *ctx) {
+    // Set the key and cert
+    if (SSL_CTX_use_certificate_file(ctx, "cert.pem", SSL_FILETYPE_PEM) <= 0) {
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    if (SSL_CTX_use_PrivateKey_file(ctx, "key.pem", SSL_FILETYPE_PEM) <= 0 ) {
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+}
+
+void startServer() {
+    int server_fd;
+    struct sockaddr_in address;
+    int opt = 1;
+    int addrlen = sizeof(address);
+
+    initialize_openssl();
+    SSL_CTX *ctx = create_context();
+    configure_context(ctx);
+
+    // Creating socket file descriptor
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("socket failed");
+        exit(EXIT_FAILURE);
+    }
+
+    // Forcefully attaching socket to the port 8080
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
+        perror("setsockopt");
+        exit(EXIT_FAILURE);
+    }
+
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(PORT);
 
-    // Bind the socket to the port
-    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
-    {
-        perror("Bind failed");
-        close(server_fd);
-        return ;
+    // Binding the socket to the network address and port
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        perror("bind failed");
+        exit(EXIT_FAILURE);
     }
 
-    // Listen for incoming connections
-    if (listen(server_fd, SOMAXCONN) < 0)
-    {
-        perror("Listen failed");
-        close(server_fd);
-        return ;
+    // Start listening for incoming connections
+    if (listen(server_fd, 3) < 0) {
+        perror("listen");
+        exit(EXIT_FAILURE);
     }
 
-    printf("Server listening on port %d...\n", PORT);
+    cout << "Server is listening on port " << PORT << endl;
 
-    while (1)
-    {
-        // Accept a connection
-        if ((new_socket = accept(server_fd, (struct sockaddr *)&address, &addr_len)) < 0)
-        {
-            perror("Accept failed");
-            continue;
+    while (true) {
+        int new_socket;
+        if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
+            perror("accept");
+            exit(EXIT_FAILURE);
         }
 
-        // Handle the connection in a separate process
-        if (fork() == 0)
-        {
-            close(server_fd); // Child process doesn't need the listener
+        SSL *ssl = SSL_new(ctx);
+        SSL_set_fd(ssl, new_socket);
 
-            // Receive and send data
-            while (1)
-            {
-                int n = read(new_socket, buffer, BUFFER_SIZE - 1);
-                if (n <= 0)
-                {
-                    break;
+        if (SSL_accept(ssl) <= 0) {
+            ERR_print_errors_fp(stderr);
+        } else {
+            char buffer[BUFFER_SIZE];
+            int valread = SSL_read(ssl, buffer, BUFFER_SIZE);
+            cout << "Received: " << buffer << endl;
+            string response;
+            string decrypt_str =str_decription(string(buffer));
+            cout << decrypt_str << endl;
+            bool flag=false;
+            vector<string> info =str_break(decrypt_str);
+            string info_type, info_key, file_path;
+            info_type =info[0];
+            // info_key =key_hashing(info[1]);
+            info_key =info[1];
+            file_path =info[2];
+            auto res =user_key(file_path);
+            if(res.first ==true && res.second!=sha256(info_key)){
+                response ="key Invalid";
+            }else{
+                if(res.first ==false && info_type =="logappend"){
+                    ofstream file;
+                    file.open("keys.csv", ios::app);
+                    file << str_encription(file_path) << " " << sha256(info_key);
+                    file << endl;
+                    file.close();
                 }
-                buffer[n] = '\0';
-                printf("Received: %s\n", buffer);
-                string response;
-                string decrypt_str =str_decription(string(buffer));
-                cout << decrypt_str << endl;
-                bool flag=false;
-                vector<string> info =str_break(decrypt_str);
-                string info_type, info_key, file_path;
-                info_type =info[0];
-                // info_key =key_hashing(info[1]);
-                info_key =info[1];
-                file_path =info[2];
-                auto res =user_key(file_path);
-                if(res.first ==true && res.second!=sha256(info_key)){
-                    response ="key Invalid";
-                }else{
-                    cout << "yes" << endl;
-                    if(res.first ==false && info_type =="logappend"){
-                        cout << "No" << endl;
-                        ofstream file;
-                        file.open("keys.csv", ios::app);
-                        file << str_encription(file_path) << " " << sha256(info_key);
-                        file << endl;
-                        file.close();
-                    }
-                    response =q_process(info);
-                }
-                cout << response << endl;
-                if(response.size()==0){
-                    response ="Invalid";
-                }
-                response =str_encription(response);
-                
-                send(new_socket, response.c_str(), response.size(), 0);
-                // Send "Pong!" back to the client
-                
+                response =q_process(info);
             }
+            // cout << response << endl;
+            if(response.size()==0){
+                response ="Invalid";
+            }
+            response =str_encription(response);
+            SSL_write(ssl, response.c_str(), response.size());
+            cout << "Response sent" << endl;
+        }
 
-            // Close the connection
-            close(new_socket);
-            return ;
-        }
-        else
-        {
-            close(new_socket); // Parent process doesn't need this socket
-        }
+        SSL_shutdown(ssl);
+        SSL_free(ssl);
+        close(new_socket);
     }
 
     close(server_fd);
+    SSL_CTX_free(ctx);
+    cleanup_openssl();
 }
 
-int main()
-{
-    Server();
+int main() {
+    startServer();
     return 0;
 }

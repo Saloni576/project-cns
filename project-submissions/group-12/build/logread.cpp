@@ -1,8 +1,10 @@
 #include <bits/stdc++.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <sys/time.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 using namespace std;
+
 #define PORT 8080
 #define BUFFER_SIZE 1024*1024 // Increase buffer size to 1MB
 #define Secret_key 1234
@@ -10,13 +12,6 @@ using namespace std;
 #include "ciphering.cpp"
 #include "input_validation.cpp"
 
-// Get current time in milliseconds
-long long current_time_in_ms()
-{
-    struct timeval time_now;
-    gettimeofday(&time_now, NULL);
-    return (time_now.tv_sec * 1000LL) + (time_now.tv_usec / 1000);
-}
 void print_str(string s){
     if(s.size()==0){
         cout << "Invalid" << endl;
@@ -28,74 +23,82 @@ void print_str(string s){
         cout << word << endl;
     }
 }
-bool build_connection(int &sockfd){
-    struct sockaddr_in server_addr;
-
-    // Create TCP socket
-    if (sockfd < 0) {
-        perror("Socket creation failed");
-        return false;
-    }
-
-    // Server address setup
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(PORT);
-    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-
-    // Connect to the server
-    if (connect(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-        perror("Connection failed");
-        return false;
-    }
-    return true;
+void initialize_openssl() {
+    SSL_load_error_strings();
+    OpenSSL_add_ssl_algorithms();
 }
 
-void send_info(string &s, int &sockfd){
-    string encript_str =str_encription(s);
-    send(sockfd, encript_str.c_str(), encript_str.size(), 0);
-    cout << "Message sent to server" << endl;
+void cleanup_openssl() {
+    EVP_cleanup();
 }
 
-int Client(string info){
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if(build_connection(sockfd) ==false){
-        close(sockfd);
+SSL_CTX *create_context() {
+    const SSL_METHOD *method;
+    SSL_CTX *ctx;
+
+    method = TLS_client_method(); // Use TLS_client_method for compatibility
+
+    ctx = SSL_CTX_new(method);
+    if (!ctx) {
+        perror("Unable to create SSL context");
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    return ctx;
+}
+
+int startLogReadClient(const string& message) {
+    int sock = 0;
+    struct sockaddr_in serv_addr;
+    char buffer[BUFFER_SIZE];
+
+    initialize_openssl();
+    SSL_CTX *ctx = create_context();
+
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        cout << "Socket creation error" << endl;
         return 255;
     }
-    if(input_validation(info) ==false){
-        cout << "Please check the input Format" << endl;
-        close(sockfd);
+
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+
+    // Convert IPv4 and IPv6 addresses from text to binary form
+    if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0) {
+        cout << "Invalid address/ Address not supported" << endl;
         return 255;
     }
-    
-    string info_type,info_key,info_path;
-    long long start_time = current_time_in_ms();
 
-    send_info(info, sockfd);
-
-    char recieved_info[BUFFER_SIZE];
-    int n = read(sockfd, recieved_info, BUFFER_SIZE - 1);
-    recieved_info[n] = '\0';
-    string decript_str = str_decription(string(recieved_info));
-    if (n < 0) {
-        perror("failed");
-        close(sockfd);
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        cout << "Connection Failed" << endl;
         return 255;
     }
-    
-    print_str(decript_str);
 
-    long long end_time = current_time_in_ms();
+    SSL *ssl = SSL_new(ctx);
+    SSL_set_fd(ssl, sock);
 
-    // Calculate RTT
-    long long rtt = end_time - start_time;
-    cout << ("RTT: %lld ms\n", rtt) << endl;
+    if (SSL_connect(ssl) <= 0) {
+        ERR_print_errors_fp(stderr);
+    } else {
+        string en_mess =str_encription(message);
+        SSL_write(ssl, en_mess.c_str(), en_mess.length());
+        cout << "Message sent" << endl;
 
-    close(sockfd);
+        int valread = SSL_read(ssl, buffer, BUFFER_SIZE);
+        buffer[valread] = '\0';
+        string decript_str = str_decription(string(buffer));
+        print_str(decript_str);
+    }
+
+    SSL_shutdown(ssl);
+    SSL_free(ssl);
+    close(sock);
+    SSL_CTX_free(ctx);
+    cleanup_openssl();
     return 0;
-
 }
+
 int main(int argc, char *argv[]) {
     string info="";
     info +=string(argv[0]);
@@ -105,6 +108,5 @@ int main(int argc, char *argv[]) {
         info +=string(argv[i]);
     }
     cout << info << endl;
-    return Client(info);
-    return 0;
+    return startLogReadClient(info);
 }
