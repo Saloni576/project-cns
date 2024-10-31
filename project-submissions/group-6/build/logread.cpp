@@ -33,7 +33,7 @@ void readLogFile(const string &token, const string &logFile, map<string, PersonI
 
     if (!log.is_open())
     {
-        cerr << "Unable to open log file." << endl;
+        cerr << "The file no longer exists! It may have been deleted" << endl;
         exit(255);
     }
     // cout << "inside" << endl;

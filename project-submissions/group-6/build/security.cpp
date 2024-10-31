@@ -515,7 +515,7 @@ unsigned char *SecureLogger::decrypt_log()
 
     if (!myfile.is_open())
     {
-        // cerr << "Unable to open encrypted log file" << endl;
+         cerr << "The file no longer exists! It may have been deleted" << endl;
         // throw runtime_error("Unable to open encrypted log file");
         exit(255);
     }
