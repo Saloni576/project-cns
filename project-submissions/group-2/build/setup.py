@@ -8,8 +8,13 @@ import bcrypt
 reserved_flags = {"-T", "-K", "-A", "-L", "-E", "-G", "-R", "-B", "-S", "-I"}
 
 def is_valid_password(password):
-    # Ensure password does not contain hyphens and is not a reserved flag
-    return '-' not in password and password not in reserved_flags
+    # Ensure password does not contain hyphens, is not a reserved flag, and is alphanumeric
+    return (
+        '-' not in password
+        and password not in reserved_flags
+        and re.match("^[a-zA-Z0-9]+$", password) is not None
+    )
+
 
 def is_valid_filename(filename):
     # Extract the base filename to check its validity
@@ -29,7 +34,7 @@ def main():
 
     # Validate password and base filename
     if not is_valid_password(password):
-        print("Invalid password: hyphens are not allowed in passwords.")
+        print("Invalid password: must be alphanumeric.")
         sys.exit(1)
     if not is_valid_filename(log_file):
         print("Invalid log file name: must be alphanumeric.")
