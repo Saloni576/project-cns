@@ -30,14 +30,88 @@ void log_error(const string &message) {
     cerr << "[ERROR] " << message << "\n";
 }
 
+bool is_valid_ip(const string &ip) {
+    // Check if IP is empty or localhost
+    if (ip.empty() || ip == "localhost" || ip == "127.0.0.1") {
+        return true;
+    }
+
+    // Split IP address into octets
+    vector<string> octets;
+    stringstream ss(ip);
+    string octet;
+    
+    while (getline(ss, octet, '.')) {
+        octets.push_back(octet);
+    }
+
+    // Check if we have exactly 4 octets
+    if (octets.size() != 4) {
+        return false;
+    }
+
+    // Convert octets to integers
+    vector<int> ip_parts;
+    for (const string &oct : octets) {
+        // Check if octet is empty or has leading zeros (unless it's just "0")
+        if (oct.empty() || (oct.length() > 1 && oct[0] == '0')) {
+            return false;
+        }
+
+        // Check if octet contains only digits
+        if (!all_of(oct.begin(), oct.end(), ::isdigit)) {
+            return false;
+        }
+
+        try {
+            int value = stoi(oct);
+            if (value < 0 || value > 255) {
+                return false;
+            }
+            ip_parts.push_back(value);
+        } catch (...) {
+            return false;
+        }
+    }
+
+    // Now check if IP falls within valid public ranges
+    unsigned int addr = (ip_parts[0] << 24) | (ip_parts[1] << 16) | (ip_parts[2] << 8) | ip_parts[3];
+
+    // Define valid ranges
+    struct IPRange {
+        unsigned int start;
+        unsigned int end;
+    };
+
+    vector<IPRange> valid_ranges = {
+        {0x01000000, 0x09FFFFFF},      // 1.0.0.0 to 9.255.255.255
+        {0x0B000000, 0x7EFFFFFF},      // 11.0.0.0 to 126.255.255.255
+        {0x80000000, 0xA9FDFFFF},      // 128.0.0.0 to 169.253.255.255
+        {0xA9FF0000, 0xAC0FFFFF},      // 169.255.0.0 to 172.15.255.255
+        {0xAC200000, 0xBFFFFFFF},      // 172.32.0.0 to 191.255.255.255
+        {0xC0000000, 0xC00000FF},      // 192.0.0.0 to 192.0.0.255
+        {0xC0000200, 0xC05862FF},      // 192.0.2.0 to 192.88.98.255
+        {0xC0586300, 0xC0A7FFFF},      // 192.88.99.0 to 192.167.255.255
+        {0xC0A90000, 0xDFFFFFFF}       // 192.169.0.0 to 223.255.255.255
+    };
+
+    // Check if IP falls within any valid range
+    for (const auto &range : valid_ranges) {
+        if (addr >= range.start && addr <= range.end) {
+            return true;
+        }
+    }
+
+    return false;
+} 
+
 void get_server_details() {
     cout << "Enter server IP (default: 127.0.0.1): ";
     string input_ip;
     getline(cin, input_ip);
     
     if (!input_ip.empty()) {
-        struct sockaddr_in sa;
-        if (inet_pton(AF_INET, input_ip.c_str(), &(sa.sin_addr)) != 1) {
+        if (!is_valid_ip(input_ip)) {
             log_error("Invalid IP format. Using default: 127.0.0.1");
             server_ip = "127.0.0.1";
         } else {
@@ -297,7 +371,7 @@ void create_account(SSL *ssl) {
     }
 
     cout << "Enter password: ";
-    cin >> password;
+    getline(cin, password);
     cout << "Enter initial amount (format: X.XX): ";
     cin >> initial_amount_str;
 
@@ -406,7 +480,7 @@ void login(SSL *ssl) {
     }
 
     cout << "Enter password: ";
-    cin >> password;
+    getline(cin, password);
     cout << "Enter card ID: ";
     cin >> card_id;
     cout << "Enter account number: ";
@@ -457,9 +531,10 @@ void login(SSL *ssl) {
 
 
 bool check_session_expiration(SSL *ssl, const string &response) {
-    if (response.find("ERROR 255 - Session expired") != string::npos) {
+    if (response.find("ERROR 255 - due to invalid session token") != string::npos ||
+        response.find("ERROR 255 - Session expired") != string::npos) {
         log_error("Error 63 - Session expired. Please log in again.");
-        session_token.clear(); 
+        session_token.clear();
         return true;
     }
     return false;
@@ -563,11 +638,16 @@ void transaction_window(SSL *ssl) {
         string response(buffer, bytes_read);
 
         if (check_session_expiration(ssl, response)) {
-            return;
+            log_message("Returning to main menu...");
+            return;  // This will exit the transaction window and return to main menu
         }
 
         if (response.find("ERROR 255") != string::npos) {
             log_error("Server response: " + response);
+            if (response.find("invalid session token") != string::npos) {
+                log_message("Returning to main menu...");
+                return;  // Exit to main menu on invalid session
+            }
             continue;
         }
 
