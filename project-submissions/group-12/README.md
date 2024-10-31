@@ -9,20 +9,52 @@
 - Pavan Deekshith
 - Venigalla Harshith
 
- server_addr.sin_addr.s_addr = inet_addr("<ip_address>");
+### Installing `libssl-dev` Library
+
+Before running the program, ensure that the `libssl-dev` library is installed on your system. Here are the instructions for different operating systems:
+
+##### Linux
+```sh
+sudo apt-get update
+sudo apt-get install -y libssl-dev
+```
+
+##### Mac
+```sh
+brew install openssl
+```
+
+### Setting up the machine
 
 If the client (logappend, logread) and server programs are run on the same machine, replace <ip_address> with 127.0.0.1 in the respective lines of code in the logappend and logread code files.
 
-If the client and server programs are run on different machines, replace <ip_address> in the logappend and logread code files with the IP address of the server machine, which can be obtained using the following commands:
+If the client and server programs are run on different machines, replace <ip_address> in the logappend and logread code files with the IP address of the server machine
 
-FOR LINUX : "ip a"
+```cpp
+ if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0) {
+        cout << "Invalid address/ Address not supported" << endl;
+        return 255;
+    }
+```
 
-FOR MAC : "ipconfig getifaddr en0"
+The IP address of the server machine can be obtained using the following commands:
 
-Invoke Makefile to run the program.
+##### Linux
+```
+ip a
+```
 
-Usage of logread and loappend commands : https://github.com/IITGN-CS431/problems/blob/main/securityguard/EXAMPLES.md  
+##### Mac
+```
+ipconfig getifaddr en0
+```
 
-References :
+- Invoke Makefile to run the program.
+
+
+
+#### Usage of logread and loappend commands : 
+https://github.com/IITGN-CS431/problems/blob/main/securityguard/EXAMPLES.md  
+
+#### References :
 RSA algorithm : https://www.geeksforgeeks.org/rsa-algorithm-cryptography/ 
-SHA256 algorithm : http://www.zedwood.com/article/cpp-sha256-function 
