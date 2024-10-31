@@ -41,16 +41,21 @@ $(SERVER_BIN): $(SERVER_SRC)
 	$(CXX) $(CXXFLAGS) $< -o $@ $(LDFLAGS)
 
 # Generate certificates and keys
-certs: $(SERVER_CERT) $(SERVER_KEY) $(CLIENT_CERT) $(CLIENT_KEY) $(CA_CERT) $(PUBLIC_KEY_FILE) $(PRIVATE_KEY_FILE)
+certs: $(CA_CERT) $(SERVER_CERT) $(SERVER_KEY) $(CLIENT_CERT) $(CLIENT_KEY) $(PUBLIC_KEY_FILE) $(PRIVATE_KEY_FILE)
 
-$(SERVER_CERT) $(SERVER_KEY):
-	openssl req -x509 -newkey rsa:2048 -keyout $(SERVER_KEY) -out $(SERVER_CERT) -days 365 -nodes -subj "/CN=localhost"
-
-$(CLIENT_CERT) $(CLIENT_KEY):
-	openssl req -x509 -newkey rsa:2048 -keyout $(CLIENT_KEY) -out $(CLIENT_CERT) -days 365 -nodes -subj "/CN=localhost"
-
+# Generate CA
 $(CA_CERT):
-	openssl req -x509 -newkey rsa:2048 -keyout $(CERT_DIR)/ca_key.pem -out $(CA_CERT) -days 365 -nodes -subj "/CN=CA"
+	openssl req -x509 -newkey rsa:2048 -keyout $(CERT_DIR)/ca_key.pem -out $(CA_CERT) -days 365 -nodes -subj "/CN=BankCA"
+
+# Generate and sign server certificate
+$(SERVER_CERT) $(SERVER_KEY):
+	openssl req -newkey rsa:2048 -nodes -keyout $(SERVER_KEY) -out $(CERT_DIR)/server.csr -subj "/CN=BankServer"
+	openssl x509 -req -in $(CERT_DIR)/server.csr -CA $(CA_CERT) -CAkey $(CERT_DIR)/ca_key.pem -CAcreateserial -out $(SERVER_CERT) -days 365
+
+# Generate and sign client certificate
+$(CLIENT_CERT) $(CLIENT_KEY):
+	openssl req -newkey rsa:2048 -nodes -keyout $(CLIENT_KEY) -out $(CERT_DIR)/client.csr -subj "/CN=BankClient"
+	openssl x509 -req -in $(CERT_DIR)/client.csr -CA $(CA_CERT) -CAkey $(CERT_DIR)/ca_key.pem -CAcreateserial -out $(CLIENT_CERT) -days 365
 
 $(PUBLIC_KEY_FILE) $(PRIVATE_KEY_FILE):
 	openssl genpkey -algorithm RSA -out $(PRIVATE_KEY_FILE) -pkeyopt rsa_keygen_bits:2048

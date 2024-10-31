@@ -1,83 +1,93 @@
 #include <bits/stdc++.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-//#include <winsock2.h>
-#include <sys/time.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 using namespace std;
+
 #define PORT 8080
-#define Secret_key 1234
+#define BUFFER_SIZE 1024*1024
 #include "ciphering.cpp"
 #include "input_validation.cpp"
-
-// Get current time in milliseconds
-long long current_time_in_ms()
-{
-    struct timeval time_now;
-    gettimeofday(&time_now, NULL);
-    return (time_now.tv_sec * 1000LL) + (time_now.tv_usec / 1000);
-}
-
-bool build_connection(int &sockfd){
-
-    struct sockaddr_in server_addr;
-
-    // Create TCP socket
-    if (sockfd < 0) {
-        perror("Socket creation failed");
-        return false;
-    }
-
-    // Server address setup
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(PORT);
-    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-
-    // Connect to the server
-    if (connect(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-        perror("Connection failed");
-        return false;
-    }
-    return true;
-}
-
 void send_info(string &s, int &sockfd){
 
     string encript_str =str_encription(s);
     send(sockfd, encript_str.c_str(), encript_str.size(), 0);
     cout << "Message sent to server" << endl;
 }
+void initialize_openssl() {
+    SSL_load_error_strings();
+    OpenSSL_add_ssl_algorithms();
+}
 
-int Client(string info){
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if(build_connection(sockfd) ==false){
-        close(sockfd);
+void cleanup_openssl() {
+    EVP_cleanup();
+}
+
+SSL_CTX *create_context() {
+    const SSL_METHOD *method;
+    SSL_CTX *ctx;
+
+    method = TLS_client_method(); // Use TLS_client_method for compatibility
+
+    ctx = SSL_CTX_new(method);
+    if (!ctx) {
+        perror("Unable to create SSL context");
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    return ctx;
+}
+
+int startLogAppendClient(const string& message) {
+    int sock = 0;
+    struct sockaddr_in serv_addr;
+    char buffer[BUFFER_SIZE] = {0};
+
+    initialize_openssl();
+    SSL_CTX *ctx = create_context();
+
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        cout << "Socket creation error" << endl;
         return 255;
     }
-    
-    string info_type,info_key,info_path;
-    long long start_time = current_time_in_ms();
 
-    send_info(info, sockfd);
-    
-    char recieved_info[1000];
-    int n = read(sockfd, recieved_info, 999);
-    recieved_info[n] = '\0';
-    string decript_str =str_decription(string(recieved_info));
-    if (n < 0) {
-        perror("failed");
-        close(sockfd);
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+
+    // Convert IPv4 and IPv6 addresses from text to binary form
+    if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0) {
+        cout << "Invalid address/ Address not supported" << endl;
         return 255;
     }
-    cout << decript_str << endl;
 
-    long long end_time = current_time_in_ms();
+    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        cout << "Connection Failed" << endl;
+        return 255;
+    }
 
-    // Calculate RTT
-    long long rtt = end_time - start_time;
-    cout << ("RTT: %lld ms\n", rtt) << endl;
+    SSL *ssl = SSL_new(ctx);
+    SSL_set_fd(ssl, sock);
 
-    close(sockfd);
+    if (SSL_connect(ssl) <= 0) {
+        ERR_print_errors_fp(stderr);
+    } else {
+        string en_mess =str_encription(message);
+        SSL_write(ssl, en_mess.c_str(), en_mess.length());
+        cout << "Message sent" << endl;
+
+        int valread = SSL_read(ssl, buffer, BUFFER_SIZE);
+        buffer[valread] = '\0';
+        string decript_str =str_decription(string(buffer));
+        cout << decript_str << endl;
+    }
+
+    SSL_shutdown(ssl);
+    SSL_free(ssl);
+    close(sock);
+    SSL_CTX_free(ctx);
+    cleanup_openssl();
     return 0;
 }
 
@@ -103,10 +113,10 @@ int main(int argc, char *argv[]) {
         string line;
         while(getline(file,line)){
             line="logappend "+line;
-            Client(line);
+            startLogAppendClient(line);
         }
         file.close();
     }
-    else return Client(info);
+    else return startLogAppendClient(info);
     return 0;
 }
