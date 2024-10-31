@@ -4,26 +4,28 @@ This project implements a secure Server-Client application for basic banking ope
 
 ## Project Structure
 
--	*Makefile*: Compiles the Server and client code and generates SSL certificates automatically.
--	*server.cpp*: Contains the server logic for handling client requests and user account management.
--	*client.cpp*: Provides a client interface to interact with the server for various banking functions.
--	*auth.txt / auth_backup.txt*: Stores user data persistently, with periodic backups.
+-	Makefile: Compiles the Server and client code and generates SSL certificates automatically.
+-	server.cpp: Contains the server logic for handling client requests and user account management.
+-	client.cpp: Provides a client interface to interact with the server for various banking functions.
+-	auth.txt / auth_backup.txt: Stores user data persistently, with periodic backups.
   
 ## Requirements
 
--	*Ubuntu OS*
--	*OpenSSL Library*: sudo apt update sudo apt install libssl-dev
--	*C++ Compiler*: GCC and C++17.
+-	Ubuntu OS
+-	OpenSSL Library: sudo apt update sudo apt install libssl-dev
+-	C++ Compiler: GCC and C++17.
   
 ## Setup and Compilation
 
-*1. Directory Creation:*
--   mkdir -p src build/bin certs
--   mv atm.cpp src/
--   mv bank.cpp src/
+1. Directory Creation:
+```
+   mkdir -p src build/bin certs
+   mv Bank_client.cpp src/
+   mv Bank_Server.cpp src/
+```
 -   ![Project Structure](<Structure.jpg>)
 
-*2.	Compile the Project:*
+2.	Compile the Project:
 1.	Run the Makefile to compile both the server and client programs, as well as generate the necessary SSL certificates: make
    
 2.	This will generate:
@@ -31,7 +33,7 @@ This project implements a secure Server-Client application for basic banking ope
 -	server_cert.pem and server_key.pem for Server SSL communication
 -	public_key.pem and private_key.pem for client-Server secure data handling
 
-*3. Running the Application*
+3. Running the Application
 1.	Start the Server:
 -	Run the server program with: ./bank
 -	The server listens on localhost at port 8080 for client connections.

@@ -20,8 +20,27 @@
 #include <iomanip>
 using namespace std;
 
+// Add at the top of server.cpp
+struct AccountData {
+    string username;
+    string password;
+    string card_id;
+    string account_number;
+    double balance;
+};
+
+struct Transaction {
+    string account_number;
+    string type;  // "DEPOSIT" or "WITHDRAW"
+    double amount;
+    string timestamp;
+};
+
+// Global data structures
+map<string, AccountData> accounts;
+vector<Transaction> transactions;
+
 void save_auth_file(const string &filename);
-#define SERVER_PORT 8080
 #define PRIVATE_KEY_FILE "../../certs/private_key.pem"
 #define AUTH_FILE "../auth.txt"
 #define BACKUP_FILE "../auth_backup.txt"
@@ -36,6 +55,9 @@ const int SESSION_TIMEOUT_SECONDS = 10;
 map<string, chrono::steady_clock::time_point> session_last_activity;
 mutex session_last_activity_mutex;
 
+string server_ip = "127.0.0.1";  // Default to all interfaces
+int server_port = 8080;        // Default port
+
 void log_message(const string &msg) {
     cout << "[INFO] " << msg << "\n";
 }
@@ -44,7 +66,53 @@ void log_error(const string &msg) {
     cerr << "[ERROR] " << msg << "\n";
 }
 
+void get_server_details() {
+    cout << "Enter server IP (default: 127.0.0.1): ";
+    string input_ip;
+    getline(cin, input_ip);
+    
+    if (!input_ip.empty()) {
+        struct sockaddr_in sa;
+        if (inet_pton(AF_INET, input_ip.c_str(), &(sa.sin_addr)) != 1) {
+            log_error("Invalid IP format. Using default: 127.0.0.1");
+            server_ip = "127.0.0.1";
+        } else {
+            server_ip = input_ip;
+        }
+    } else {
+        server_ip = "127.0.0.1";  // Default to localhost
+    }
+
+    cout << "Enter server port (default: 8080): ";
+    string input_port;
+    getline(cin, input_port);
+    
+    if (!input_port.empty()) {
+        try {
+            int port = stoi(input_port);
+            if (port > 0 && port < 65536) {
+                server_port = port;
+            } else {
+                log_error("Invalid port number (must be between 1-65535). Using default: 8080");
+                server_port = 8080;
+            }
+        } catch (const exception&) {
+            log_error("Invalid port format. Using default: 8080");
+            server_port = 8080;
+        }
+    } else {
+        server_port = 8080;
+    }
+
+    log_message("Server will listen on " + server_ip + ":" + to_string(server_port));
+}
+
 bool is_valid_username(const string &username) {
+    // Check for spaces first
+    if (username.find(' ') != string::npos) {
+        return false;
+    }
+
     if (username == "." || username == "..") {
         return true;
     }
@@ -72,7 +140,7 @@ bool is_valid_amount(const string &amount_str) {
         }
 
         double amount = stod(amount_str);
-        return amount >= 0.00 && amount <= 4294967295.99;
+        return amount > 0.00 && amount <= 4294967295.99;
     } catch (const exception&) {
         return false;
     }
@@ -426,9 +494,33 @@ SSL_CTX *create_ssl_context() {
         exit(EXIT_FAILURE);
     }
 
-    if (SSL_CTX_use_certificate_file(ctx, "../../certs/server_cert.pem", SSL_FILETYPE_PEM) <= 0 ||
-        SSL_CTX_use_PrivateKey_file(ctx, "../../certs/server_key.pem", SSL_FILETYPE_PEM) <= 0) {
-        log_error("Failed to load certificates");
+    // Load the server certificate and private key
+    if (SSL_CTX_use_certificate_file(ctx, "../../certs/server_cert.pem", SSL_FILETYPE_PEM) <= 0) {
+        log_error("Failed to load server certificate");
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    if (SSL_CTX_use_PrivateKey_file(ctx, "../../certs/server_key.pem", SSL_FILETYPE_PEM) <= 0) {
+        log_error("Failed to load server private key");
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    // Set verify mode to require client certificate
+    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+    SSL_CTX_set_verify_depth(ctx, 1);
+
+    // Add this line to load CA certificate for client verification
+    if (SSL_CTX_load_verify_locations(ctx, "../../certs/ca_cert.pem", NULL) <= 0) {
+        log_error("Failed to load CA certificate for client verification");
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    // Verify private key
+    if (!SSL_CTX_check_private_key(ctx)) {
+        log_error("Private key does not match the certificate");
         ERR_print_errors_fp(stderr);
         exit(EXIT_FAILURE);
     }
@@ -502,7 +594,52 @@ void create_backup() {
     log_message("Backup created: " + string(BACKUP_FILE));
 }
 
+void save_accounts_to_file() {
+    ofstream file("bank_accounts.dat", ios::out);
+    if (!file) {
+        log_error("Failed to open accounts file for writing");
+        return;
+    }
 
+    for (const auto& [username, data] : accounts) {
+        file << username << "|"
+             << data.password << "|"
+             << data.card_id << "|"
+             << data.account_number << "|"
+             << fixed << setprecision(2) << data.balance << "\n";
+    }
+    file.close();
+}
+
+void load_accounts_from_file() {
+    ifstream file("bank_accounts.dat");
+    if (!file) {
+        log_message("No existing accounts file found");
+        return;
+    }
+
+    string line;
+    while (getline(file, line)) {
+        stringstream ss(line);
+        string username, password, card_id, account_number, balance_str;
+        
+        getline(ss, username, '|');
+        getline(ss, password, '|');
+        getline(ss, card_id, '|');
+        getline(ss, account_number, '|');
+        getline(ss, balance_str, '|');
+
+        AccountData data;
+        data.username = username;
+        data.password = password;
+        data.card_id = card_id;
+        data.account_number = account_number;
+        data.balance = stod(balance_str);
+        
+        accounts[username] = data;
+    }
+    file.close();
+}
 
 int main() {
     SSL_CTX *ctx = create_ssl_context();
@@ -511,16 +648,37 @@ int main() {
 
     create_backup();
 
+    get_server_details();
+
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd < 0) {
+        log_error("Socket creation failed");
+        return -1;
+    }
+
+    // Add this to allow socket reuse
+    int opt = 1;
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
+        log_error("Setsockopt failed");
+        return -1;
+    }
+
     sockaddr_in addr;
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(SERVER_PORT);
-    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(server_port);
+    if (inet_pton(AF_INET, server_ip.c_str(), &addr.sin_addr) <= 0) {
+        log_error("Invalid address/Address not supported");
+        return -1;
+    }
 
-    bind(server_fd, (struct sockaddr *)&addr, sizeof(addr));
+    if (bind(server_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        log_error("Bind failed");
+        return -1;
+    }
+
     listen(server_fd, SOMAXCONN);
 
-    log_message("Server listening on port 8080...");
+    log_message("Server listening on port " + to_string(server_port) + "...");
 
     thread session_cleanup_thread([]() {
         while (true) {
@@ -539,6 +697,9 @@ int main() {
         }
     });
 
+    // Load accounts data at startup
+    load_accounts_from_file();
+
     while (true) {
         int client_fd = accept(server_fd, NULL, NULL);
         thread([client_fd, ctx]() {
@@ -552,6 +713,25 @@ int main() {
                 close(client_fd);
                 return;
             }
+
+            // Add this block for certificate verification
+            X509* client_cert = SSL_get_peer_certificate(ssl);
+            if (client_cert == NULL) {
+                log_error("No client certificate provided");
+                SSL_free(ssl);
+                close(client_fd);
+                return;
+            }
+
+            if (SSL_get_verify_result(ssl) != X509_V_OK) {
+                log_error("Client certificate verification failed");
+                X509_free(client_cert);
+                SSL_free(ssl);
+                close(client_fd);
+                return;
+            }
+
+            X509_free(client_cert);
 
             char buffer[1024] = {0};
             SSL_read(ssl, buffer, sizeof(buffer));
