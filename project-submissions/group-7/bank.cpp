@@ -62,6 +62,7 @@ long long port = -1;
 string auth_file_address = "";
 int server_fd;
 sqlite3 *DB;
+string auth_content;
 
 /*
 -----------------------------------------------------------------------------------------------------
@@ -1357,7 +1358,7 @@ int main(int argc, char *argv[])
 
     create_table();
     string pass = generateRandomPassword();
-    ifstream authfile("bank.auth");
+    ifstream authfile(auth_file_address);
     if (authfile.is_open())
     {
         cout << "Overwriting the auth file" << endl;
@@ -1367,7 +1368,7 @@ int main(int argc, char *argv[])
         cout << "Authfile created" << endl;
     }
     authfile.close();
-    ofstream authfileout("bank.auth");
+    ofstream authfileout(auth_file_address);
     authfileout << pass;
     authfileout.close();
     generateRSAKeyPairs();
