@@ -445,7 +445,7 @@ void startServer() {
     struct sockaddr_in address;
     int opt = 1;
     int addrlen = sizeof(address);
-
+    
     initialize_openssl();
     SSL_CTX *ctx = create_context();
     configure_context(ctx);
@@ -493,7 +493,7 @@ void startServer() {
         if (SSL_accept(ssl) <= 0) {
             ERR_print_errors_fp(stderr);
         } else {
-            char buffer[BUFFER_SIZE];
+            char buffer[BUFFER_SIZE] ={0};
             int valread = SSL_read(ssl, buffer, BUFFER_SIZE);
             cout << "Received: " << buffer << endl;
             string response;
@@ -531,6 +531,7 @@ void startServer() {
         SSL_shutdown(ssl);
         SSL_free(ssl);
         close(new_socket);
+        cleanup_openssl();
     }
 
     close(server_fd);

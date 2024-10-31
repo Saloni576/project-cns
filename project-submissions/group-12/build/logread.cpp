@@ -107,6 +107,5 @@ int main(int argc, char *argv[]) {
         info +=" ";
         info +=string(argv[i]);
     }
-    cout << info << endl;
     return startLogReadClient(info);
 }
