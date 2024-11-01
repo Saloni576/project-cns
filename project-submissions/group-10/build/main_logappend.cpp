@@ -493,6 +493,16 @@ private:
 
         return anySuccess;
     }
+bool isValidRoomId(const std::string& roomId) {
+    if (roomId.empty()) return false;
+    
+    for (char c : roomId) {
+        if (c < '0' || c > '9') return false;
+    }
+    
+    long long roomIdLong = std::stoll(roomId);
+    return roomIdLong >= 0 && roomIdLong <= 1073741823;
+}
 
 // Main function: Handles command-line arguments and executes the appropriate action
 
@@ -591,6 +601,11 @@ int main(int argc, char* argv[]) {
                 isLeaving = true;
             }
             else if (strcmp(argv[i], "-R") == 0) {
+                std::string roomIdStr = argv[++i];
+                if (!isValidRoomId(roomIdStr)) {
+                    std::cout << "invalid" << std::endl;
+                    return 255;
+                }
                 if (!safe_stoi(argv[++i], roomId)) {
                     std::cout << "invalid" << std::endl;
                     return 255;
