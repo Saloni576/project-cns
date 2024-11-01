@@ -62,6 +62,7 @@ long long port = -1;
 string auth_file_address = "";
 int server_fd;
 sqlite3 *DB;
+string auth_content;
 
 /*
 -----------------------------------------------------------------------------------------------------
@@ -1327,6 +1328,29 @@ string generateRandomPassword(int length = 64)
     return password;
 }
 
+
+bool isValidFileName(const string &fileName)
+{
+    if (fileName.length() < 6 || fileName.length() > 132)
+    {
+        return false;
+    }
+    string extension = fileName.substr(fileName.length() - 5);
+    if (extension != ".auth")
+    {
+        return false;
+    }
+    string name = fileName.substr(0, fileName.length() - 5);
+    if (name == "." || name == "..")
+    {
+        return false;
+    }
+
+    regex validPattern("^[-_.0-9a-z]+$");
+
+    return regex_match(name, validPattern);
+}
+
 int main(int argc, char *argv[])
 {
 
@@ -1334,6 +1358,11 @@ int main(int argc, char *argv[])
     // If the arguments are invalid function will return 1
     if (parse_arguments(argc, argv))
     {
+        exit(255);
+    }
+
+    if (!isValidFileName(auth_file_address)){
+        cout<<"Please provide a valid auth file name!\n";
         exit(255);
     }
 
@@ -1357,7 +1386,7 @@ int main(int argc, char *argv[])
 
     create_table();
     string pass = generateRandomPassword();
-    ifstream authfile("bank.auth");
+    ifstream authfile(auth_file_address);
     if (authfile.is_open())
     {
         cout << "Overwriting the auth file" << endl;
@@ -1367,7 +1396,7 @@ int main(int argc, char *argv[])
         cout << "Authfile created" << endl;
     }
     authfile.close();
-    ofstream authfileout("bank.auth");
+    ofstream authfileout(auth_file_address);
     authfileout << pass;
     authfileout.close();
     generateRSAKeyPairs();

@@ -194,7 +194,7 @@ void check_req_args(string &error)
     }
     if (USER_CARD == "")
     {
-        error += "User authentication failed! Missing argument -c [...] \n";
+        USER_CARD = ACCOUNT+".card";
     }
     if (MODE == '-')
     {
@@ -771,6 +771,11 @@ void createNewAccount(const string &account, string &balance, const string &card
     string AUTH_CONTENT;
     AuthFile >> AUTH_CONTENT;
     AuthFile.close();
+
+    if (stod(balance) < 10){
+        cerr << "Invalid initial ammount" << endl;
+        exit(255);  
+    }
 
     Value jsonMessage;
     jsonMessage["auth"] = AUTH_CONTENT;
