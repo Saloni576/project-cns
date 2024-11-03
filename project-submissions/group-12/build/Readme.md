@@ -49,7 +49,8 @@ ip a
 ipconfig getifaddr en0
 ```
 
-- Invoke Makefile to run the program.
+- Navigate to the project directory and invoke Makefile to run the program.
+- To remove the compiled binaries, use 'make clean'
 
 
 
