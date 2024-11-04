@@ -330,8 +330,7 @@ private:
             return encryptAndWriteLog();
         }
 
-        // Validates an entry before appending it to the log
-
+        
         bool validateEntry(const Event& event) {
             // Basic validation checks
             if (event.timestamp < 1 || event.timestamp > MAX_TIMESTAMP) return false;
@@ -339,8 +338,10 @@ private:
             if (!isValidToken(event.token)) return false;
             if (!validToken.empty() && event.token != validToken) return false;
             if (!isValidName(event.name)) return false;
-            if (event.roomId < -1 || event.roomId > MAX_ROOM_ID) return false;
-
+            
+            // Room ID validation - allow -1 for campus events
+            if (event.roomId != -1 && (event.roomId < 1 || event.roomId > MAX_ROOM_ID)) return false;
+            
             std::string key = (event.isEmployee ? "E:" : "G:") + event.name;
 
             if (event.isArrival) {
@@ -365,18 +366,34 @@ private:
         }
     };
     bool safe_stol(const char* str, long& result) {
+        if (!str || *str == '\0') return false;
+        
+        
+        if (str[0] == '+') return false;
+        
+        
+        if (!std::isdigit(static_cast<unsigned char>(str[0]))) {
+            return false;
+        }
+        
+        
+        for (size_t i = 1; str[i] != '\0'; i++) {
+            if (!std::isdigit(static_cast<unsigned char>(str[i]))) {
+                return false;
+            }
+        }
+
         try {
-            char* endptr;
-            result = std::strtol(str, &endptr, 10);
+            result = std::strtol(str, nullptr, 10);
             
-            // Check if conversion was successful and the entire string was used
-            if (*endptr != '\0' || endptr == str) {
+            
+            if (result == std::numeric_limits<long>::max() || 
+                result == std::numeric_limits<long>::min()) {
                 return false;
             }
             
-            // Check for overflow/underflow
-            if (result == std::numeric_limits<long>::max() || 
-                result == std::numeric_limits<long>::min()) {
+            
+            if (result < 1 || result > MAX_TIMESTAMP) {
                 return false;
             }
             
@@ -386,20 +403,44 @@ private:
         }
     }
 
-    // Function to safely convert string to int
     bool safe_stoi(const char* str, int& result) {
+        if (!str || *str == '\0') return false;
+        
+        
+        if (strcmp(str, "") == 0) return false;
+        
+        
+        if (str[0] == '+') return false;
+        
+        
+        if (strcmp(str, "-1") == 0) {
+            result = -1;
+            return true;
+        }
+        
+       
+        if (!std::isdigit(static_cast<unsigned char>(str[0]))) {
+            return false;
+        }
+        
+        
+        for (size_t i = 1; str[i] != '\0'; i++) {
+            if (!std::isdigit(static_cast<unsigned char>(str[i]))) {
+                return false;
+            }
+        }
+
         try {
             char* endptr;
             long temp = std::strtol(str, &endptr, 10);
             
-            // Check if conversion was successful and the entire string was used
-            if (*endptr != '\0' || endptr == str) {
+           
+            if (*endptr != '\0') {
                 return false;
             }
             
-            // Check if the value fits in an int
-            if (temp > std::numeric_limits<int>::max() || 
-                temp < std::numeric_limits<int>::min()) {
+           
+            if (temp < 1 || temp > MAX_ROOM_ID) {
                 return false;
             }
             
@@ -409,7 +450,6 @@ private:
             return false;
         }
     }
-
     // Processes a batch file containing multiple log entries
     bool processBatchFile(const std::string& batchFile) {
         std::ifstream file(batchFile);
