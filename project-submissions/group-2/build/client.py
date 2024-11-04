@@ -1,8 +1,8 @@
 import socket
 
 def main():
-    host = '127.0.0.1'  # Server address
-    port = 12345        # Port to connect to
+    host = '10.7.23.164'  # Server address
+    port = 12345          # Port to connect to
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
         client_socket.connect((host, port))
