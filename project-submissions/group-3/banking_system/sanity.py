@@ -12,7 +12,7 @@ def validate_parameters(auth_file, ip_address, port, card_file, account, pin):
         return False, "Invalid card_file name"
 
     # Validate account names
-    account_name_pattern = re.compile(r'^[a-z0-9_.-]{1,127}$')
+    account_name_pattern = re.compile(r'^[a-z0-9_.-]{1,122}$')
     if not account_name_pattern.match(account):
         return False, "Invalid account name"
 
