@@ -236,7 +236,7 @@ async def logout(request: Request,data: Balance = Body(...), db: AsyncSession = 
 async def withdraw(request: Request,data: transaction = Body(...), db: AsyncSession = Depends(get_db), token: str = Depends(oauth2_scheme)):
     await validate_token(data, token, db)
     if Decimal(data.amount) <= 0:
-        return {"message": "Invalid amount", "status": -2}
+        return {"message": "Invalid amount", "status": -3}
     result = await db.execute(select(Account).filter(Account.account_name == data.account_name))
     account = result.scalars().first()
     if account:

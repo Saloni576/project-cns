@@ -7,7 +7,7 @@ import random
 import traceback
 import sanity
 from typing import Dict, Any
-from decimal import Decimal, ROUND_DOWN
+from decimal import Decimal, ROUND_DOWN, InvalidOperation
 
 certificate_path = "certs/cert.pem"
 cards_directory = "cards"
@@ -93,17 +93,17 @@ def update_auth_file(auth_file: str, account: str, data: Dict[str, Any]) -> None
         sys.exit(255)
 
 def create_account(account_name: str, card_number: str, pin: str, balance: Decimal, ip_address: str, port: int):
+    # Check for more than 2 decimal places
+    if balance.as_tuple().exponent < -2:
+        click.echo("Warning: Only 2 decimal places are supported. Truncating amount.", err=True)
+        balance = balance.quantize(Decimal('0.01'), rounding=ROUND_DOWN)
+
     if balance < 10.00:
         click.echo("Error: Invalid initial balance", err=True)
         sys.exit(255)
     if balance >= 4294967296:
         click.echo("Error: Initial amount exceeds the maximum limit", err=True)
         sys.exit(255)
-
-    # Check for more than 2 decimal places
-    if balance.as_tuple().exponent < -2:
-        click.echo("Warning: Only 2 decimal places are supported. Truncating amount.", err=True)
-        balance = balance.quantize(Decimal('0.01'), rounding=ROUND_DOWN)
 
     # Creation of JSON data for sending to server
     data = {
@@ -149,17 +149,17 @@ def account_login(account_name: str, card_number: str, pin: str, auth_file: str,
         sys.exit(255)
 
 def make_deposit(account_name: str, card_number: str, amount: Decimal, auth_file: str, ip_address: str, port: int):
+    # Check for more than 2 decimal places
+    if amount.as_tuple().exponent < -2:
+        click.echo("Warning: Only 2 decimal places are supported. Truncating amount.", err=True)
+        amount = amount.quantize(Decimal('0.01'), rounding=ROUND_DOWN)
+
     if amount <= 0.00:
         click.echo("Error: Invalid deposit amount", err=True)
         sys.exit(255)
     if amount >= 4294967296:
         click.echo("Error: Deposit amount exceeds the maximum limit", err=True)
         sys.exit(255)
-
-    # Check for more than 2 decimal places
-    if amount.as_tuple().exponent < -2:
-        click.echo("Warning: Only 2 decimal places are supported. Truncating amount.", err=True)
-        amount = amount.quantize(Decimal('0.01'), rounding=ROUND_DOWN)
 
     auth_token = read_auth_file(auth_file, account_name)
     data = {
@@ -177,7 +177,7 @@ def make_deposit(account_name: str, card_number: str, amount: Decimal, auth_file
             click.echo("Wrong credentials", err=True)
             sys.exit(255)
         elif (response["status"] == -2):
-            click.echo("Amount exceeds the limit", err=True)
+            click.echo("Invalid Deposit Amount", err=True)
             sys.exit(255)
         else:
             click.echo("ERROR: Account not found", err=True)
@@ -187,14 +187,14 @@ def make_deposit(account_name: str, card_number: str, amount: Decimal, auth_file
         sys.exit(255)
 
 def make_withdrawal(account_name: str, card_number: str, amount: Decimal, auth_file: str, ip_address: str, port: int):
-    if amount <= 0.00:
-        click.echo("Error: Invalid withdrawal amount", err=True)
-        sys.exit(255)
-
     # Check for more than 2 decimal places
     if amount.as_tuple().exponent < -2:
         click.echo("Warning: Only 2 decimal places are supported. Truncating amount.", err=True)
         amount = amount.quantize(Decimal('0.01'), rounding=ROUND_DOWN)
+
+    if amount <= 0.00:
+        click.echo("Error: Invalid withdrawal amount", err=True)
+        sys.exit(255)
 
     auth_token = read_auth_file(auth_file, account_name)
     data = {
@@ -207,14 +207,8 @@ def make_withdrawal(account_name: str, card_number: str, amount: Decimal, auth_f
         if (response["status"] == 1):
             click.echo("Withdrawal successful")
             click.echo({"account": account_name, "withdraw": format(amount, ".2f")})
-        elif (response["status"] == 0):
-            click.echo("Wrong credentials", err=True)
-            sys.exit(255)
-        elif (response["status"] == -2):
-            click.echo("Insufficient balance", err=True)
-            sys.exit(255)
         else:
-            click.echo("ERROR: Account not found", err=True)
+            click.echo(response["message"], err=True)
             sys.exit(255)
     else:
         click.echo("ERROR: Withdrawal failed", err=True)
@@ -260,7 +254,7 @@ def account_logout(account_name: str, card_number: str, auth_file: str, ip_addre
                 os.remove(auth_file)
             click.echo(click.style("Logout successful. Visit Again.", fg="green"))
         else:
-            click.echo(response[ "message"], err=True)
+            click.echo(response["message"], err=True)
             sys.exit(255)
     else:
         click.echo("ERROR: Logout failed", err=True)
@@ -329,10 +323,8 @@ def atm(auth_file, ip_address, port, card_file, account, new_account, deposit, w
         if os.path.exists(card_file_path):
             click.echo(f"Error: {card_file} card file already exists, try something else", err=True)
             sys.exit(255)
-        # Create the card file and store the unique card number
+        # Generate corresponding card number
         card_number = sanity.generate_card_number(account)
-        with open(card_file_path, "w") as f:
-            f.write(card_number)
     else:
         # Check if the card file exists in the cards directory
         if not os.path.exists(card_file_path):
@@ -347,6 +339,9 @@ def atm(auth_file, ip_address, port, card_file, account, new_account, deposit, w
 
     if new_account is not None:
         create_account(account, card_number, pin, Decimal(new_account), ip_address, port)
+        # Create the card file and store the unique card number
+        with open(card_file_path, "w") as f:
+            f.write(card_number)
     elif login:
         account_login(account, card_number, pin, auth_file, ip_address, port)
     elif deposit is not None:
@@ -363,8 +358,12 @@ def atm(auth_file, ip_address, port, card_file, account, new_account, deposit, w
 
 def global_exception_handler(exc_type, exc_value, exc_traceback):
     # traceback.print_exception(exc_type, exc_value, exc_traceback, file=sys.stderr)
-    print(f"{exc_type.__name__}", file=sys.stderr)
-    sys.exit(255)
+    if exc_type == InvalidOperation:
+        click.echo("Error: Invalid decimal value", err=True)
+        sys.exit(255)
+    else:
+        print(f"Following error arised : {exc_type.__name__}", file=sys.stderr)
+        sys.exit(255)
 
 sys.excepthook = global_exception_handler
 
