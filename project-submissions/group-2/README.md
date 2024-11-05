@@ -29,6 +29,7 @@
 ./logread -K <password> -R (-E <name> | -G <name>) logfile_name
 ./logread -K <token> -I (-E <name> | -G <name>) [(-E <name> | -G <name>) ...] logfile_name
 ```
+NOTE: Timestamps and Room Numbers like """10""" and 10\10\21 are accepted as valid. Python automatically strips the quotes and the escape characters from the arguments.
 
 #### Some Examples:
 
