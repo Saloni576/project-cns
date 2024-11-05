@@ -36,7 +36,7 @@ const std::regex AMOUNT_PATTERN(R"((0|[1-9]\d{0,9})(\.\d{2})?)");
 SSL_CTX* InitClientCTX();
 std::string generateHMAC(const std::string& message);
 std::string sendRequest(Json::Value& request, const char* ip, int port);
-bool createCardFile(const std::string& cardFile, int pin);
+bool createCardFile(const std::string& cardFile, int pin, std::string account);
 std::string readCardFile(const std::string& cardFile);
 int getPIN();
 bool isValidAccountName(const std::string& account);
@@ -249,7 +249,7 @@ int main(int argc, char* argv[]) {
             responsefromServer = sendRequest(request, ipAddress.c_str(), port);
 
             if (responsefromServer == "Account created successfully.") {
-                if (createCardFile(cardFile, pin)) {
+                if (createCardFile(cardFile, pin, account)) {
                     std::cout << "Card file created successfully: " << cardFile << std::endl;
                 } else {
                     std::cerr << "Failed to create card file." << std::endl;
@@ -293,12 +293,13 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-bool createCardFile(const std::string& cardFile, int pin) {
+bool createCardFile(const std::string& cardFile, int pin, std::string account) {
     std::ofstream cardStream(cardFile);
     if (!cardStream) {
         std::cerr << "Error: Could not create card file " << cardFile << std::endl;
         return false;
     }
+    cardStream << account << std::endl;
     cardStream << pin << std::endl; 
     cardStream.close(); 
     encryptFile(cardFile); 
