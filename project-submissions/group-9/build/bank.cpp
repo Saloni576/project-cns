@@ -35,12 +35,12 @@ std::string generateHMAC(const std::string& message);
 bool verifyHMAC(const std::string& message, const std::string& receivedHmac);
 void readAuthFile(const std::string& authFile);
 bool createAccount(const std::string& accountNumber, double initialBalance, const std::string& pin);
-bool verifyPin(const std::string& accountNumber, const std::string& inputPin);
+bool verifyPin(const std::string& accountNumber, const std::string& inputPin, std::string accountName);
 SSL_CTX* InitServerCTX();
 void handleClient(SSL* ssl);
 void signalHandler(int signum);
 int parseCommandLineArguments(int argc, char* argv[]);
-std::string readCardFile(const std::string& cardFile);
+std::pair<std::string, std::string> readCardFile(const std::string& cardFile);
 void sendErrorResponse(SSL* ssl, const std::string& message);
 void sendResponse(SSL* ssl, const Json::Value& responseJson);
 
@@ -220,10 +220,10 @@ bool createAccount(const std::string& accountNumber, double initialBalance, cons
     return 1;
 }
 
-bool verifyPin(const std::string& accountNumber, const std::string& inputPin) {
+bool verifyPin(const std::string& accountNumber, const std::string& inputPin, std::string accountName) {
     auto it = accountPins.find(accountNumber);
     if (it != accountPins.end()) {
-        return it->second == inputPin;
+        return (it->second == inputPin) && (accountNumber == accountName);
     }
     return false;
 }
@@ -323,8 +323,11 @@ void handleClient(SSL* ssl) {
         
         std::string cardFile = requestJson["cardFile"].asString();
         decryptFile(cardFile);
-        std::string pin = readCardFile(cardFile);
+        std::pair<std::string, std::string> cardData = readCardFile(cardFile);
         encryptFile(cardFile);
+
+        std::string accountName = cardData.first;
+        std::string pin = cardData.second;
 
         if (operation == "deposit" || operation == "withdraw" || operation == "get_balance") {
             if (!requestJson.isMember("amount") && (operation == "deposit" || operation == "withdraw")) {
@@ -332,7 +335,7 @@ void handleClient(SSL* ssl) {
                 return;
             }
 
-            if (verifyPin(account, pin)) {
+            if (verifyPin(account, pin, accountName)) {
                 if (operation == "deposit") {
                     double amount = requestJson["amount"].asDouble();
                     // Update account balance logic
@@ -353,7 +356,7 @@ void handleClient(SSL* ssl) {
                     responseJson["balance"] = accountBalances[account];
                 }
             } else {
-                sendErrorResponse(ssl, "Invalid PIN.");
+                sendErrorResponse(ssl, "Invalid PIN or cardFile.");
                 return;
             }
         } else {
@@ -379,19 +382,20 @@ void sendResponse(SSL* ssl, const Json::Value& responseJson) {
     SSL_write(ssl, responseMessage.c_str(), responseMessage.size());
 }
 
-std::string readCardFile(const std::string& cardFile) {
+std::pair<std::string, std::string> readCardFile(const std::string& cardFile) {
     // decryptFile(cardFile); // Decrypt the file before reading
     std::ifstream infile(cardFile);
-    std::string line;
+    std::string accountName, pin;
 
     if (infile.is_open()) {
-        std::getline(infile, line); // Read the PIN from the card file
+        std::getline(infile, accountName);
+        std::getline(infile, pin); // Read the PIN from the card file
         infile.close();
-        return line;
+        return {accountName, pin};
     }
     std::cerr << "Failed to open card file after decryption." << std::endl;
     // encryptFile(cardFile); // Re-encrypt the file if read fails
-    return "";
+    return {"", ""};
 }
 
 void signalHandler(int signum) {
