@@ -98,6 +98,21 @@ def check_entry_exit_restrictions(current_room, args):
 
     return True, None
 
+def is_valid_integer(argument):
+    # Check for any leading or trailing whitespace
+    if argument != argument.strip():
+        return False
+    
+    # Reject arguments with quotes, slashes, signs, or any non-digit characters
+    if '"' in argument or "'" in argument or '/' in argument or '\\' in argument or '+' in argument or '-' in argument:
+        return False
+
+    # Ensure only digits are present
+    if not argument.isdigit():
+        return False
+
+    return True
+
 def normalize_room_id(room_id):
     # Convert the room ID to an integer to drop leading zeros
     normalized_id = str(int(room_id))
@@ -124,7 +139,7 @@ def process_batch_file(batch_file):
 # Main function to process command-line arguments and append log entry
 def process_args(args=None):
     parser = argparse.ArgumentParser(description="Append new log entry.")
-    parser.add_argument("-T", required=True, type=int, help="Timestamp for the event")
+    parser.add_argument("-T", required=True, type=str, help="Timestamp for the event")
     parser.add_argument("-K", required=True, help="Authentication token")
     parser.add_argument("-E", help="Employee name")
     parser.add_argument("-G", help="Guest name")
@@ -135,12 +150,17 @@ def process_args(args=None):
 
     args = parser.parse_args(args)
 
-    if not (0 < args.T <= 1073741823):
+    if not (is_valid_integer(args.T)):
+        raise ValueError("Invalid Timestamp.")
+
+    if not (0 < int(args.T) <= 1073741823):
         raise ValueError("Timestamp cannot be zero.")
 
     # Ensure that the room ID is an integer between 0 and 1,073,741,823
     if args.R is not None:
         try:
+            if not is_valid_integer(args.R):
+                raise ValueError("Invalid Room Number.")
             args.R = normalize_room_id(args.R)
             room_id = int(args.R)
             if room_id < 0 or room_id > 1073741823:
