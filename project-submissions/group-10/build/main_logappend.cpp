@@ -330,17 +330,18 @@ private:
             return encryptAndWriteLog();
         }
 
-        
+    
         bool validateEntry(const Event& event) {
             // Basic validation checks
-            if (event.timestamp < 1 || event.timestamp > MAX_TIMESTAMP) return false;
+            if (event.timestamp < 0 || event.timestamp > MAX_TIMESTAMP) return false;
             if (!events.empty() && event.timestamp <= events.back().timestamp) return false;
             if (!isValidToken(event.token)) return false;
             if (!validToken.empty() && event.token != validToken) return false;
             if (!isValidName(event.name)) return false;
             
-            // Room ID validation - allow -1 for campus events
-            if (event.roomId != -1 && (event.roomId < 1 || event.roomId > MAX_ROOM_ID)) return false;
+            // Room ID validation - must be either -1 for campus events or >= 0 for room events
+            if (event.roomId != -1 && event.roomId < 0) return false;
+            if (event.roomId > MAX_ROOM_ID) return false;
             
             std::string key = (event.isEmployee ? "E:" : "G:") + event.name;
 
@@ -418,12 +419,12 @@ private:
             return true;
         }
         
-       
+        
         if (!std::isdigit(static_cast<unsigned char>(str[0]))) {
             return false;
         }
         
-        
+        // Rest must be digits
         for (size_t i = 1; str[i] != '\0'; i++) {
             if (!std::isdigit(static_cast<unsigned char>(str[i]))) {
                 return false;
@@ -434,13 +435,13 @@ private:
             char* endptr;
             long temp = std::strtol(str, &endptr, 10);
             
-           
+            // Check if entire string was parsed
             if (*endptr != '\0') {
                 return false;
             }
             
-           
-            if (temp < 1 || temp > MAX_ROOM_ID) {
+            // Check range: can be 0 through MAX_ROOM_ID
+            if (temp < 0 || temp > MAX_ROOM_ID) {
                 return false;
             }
             
