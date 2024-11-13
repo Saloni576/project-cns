@@ -139,6 +139,15 @@ void validate_name(const std::string& name) {
     }
 }
 
+
+void validate_logname(const std::string& name) {
+    for (char ch : name) {
+        if (!std::isalnum(ch) && ch != '_') {  // Allow only alphanumeric and underscores
+            throw std::runtime_error("Error: Name must contain only alphanumeric characters (a-z, A-Z, 0-9) and underscores. Slashes and periods are not allowed as specified in the README. Please refer the repo for more details.");
+        }
+    }
+}
+
 bool process_logappend(int argc, char* argv[]) {
     std::string timestamp, token, action, name, role, log_file, room_id;
     bool TBool = false;
@@ -263,6 +272,7 @@ bool process_logappend(int argc, char* argv[]) {
             }
             log_file = argv[i]; 
             logBool = true; // Final argument is the log file
+            validate_logname(log_file);
         }
     }
 
