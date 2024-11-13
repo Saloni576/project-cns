@@ -80,6 +80,24 @@ bool send_read_request(const std::string& query, const std::string& server, cons
     }
 }
 
+void validate_name(const std::string& name) {
+    for (char ch : name) {
+        if (!std::isalpha(ch)) {  // Check if all characters are alphabetic
+            throw std::runtime_error("Error: Name must contain only alphabetic characters (a-z, A-Z) with no spaces.");
+        }
+    }
+}
+
+
+void validate_logname(const std::string& name) {
+    for (char ch : name) {
+        if (!std::isalnum(ch) && ch != '_') {  // Allow only alphanumeric and underscores
+            throw std::runtime_error("Error: Name must contain only alphanumeric characters (a-z, A-Z, 0-9) and underscores. Slashes and periods are not allowed as specified in the README. Please refer the repo for more details.");
+        }
+    }
+}
+
+
 int main(int argc, char* argv[]) {
     if (argc < 5) {  // Adjust this based on required flags
         std::cerr << "Invalid number of arguments" << std::endl;
@@ -143,6 +161,19 @@ int main(int argc, char* argv[]) {
             }
             EBool = true;
             name = argv[++i];
+            try {
+                for (char c : name) {
+                    if (!std::isalpha(static_cast<unsigned char>(c)) || c == '"') {
+                        std::cerr << "Invalid! Name contains non-alphabetic characters" << std::endl;
+                        return 255;
+                    }
+                }
+                validate_name(name);  // Validate the name
+                std::cout << "Valid name: " << name << std::endl;
+            } catch (const std::runtime_error& e) {
+                std::cerr << e.what() << std::endl;
+                return 1;  // Exit with error
+            }
             role = "Employee";
         } else if (strcmp(argv[i], "-G") == 0) {
             if (GBool) {
@@ -151,6 +182,19 @@ int main(int argc, char* argv[]) {
             }
             GBool = true;
             name = argv[++i];
+            try {
+                for (char c : name) {
+                    if (!std::isalpha(static_cast<unsigned char>(c)) || c == '"') {
+                        std::cerr << "Invalid! Name contains non-alphabetic characters" << std::endl;
+                        return 255;
+                    }
+                }
+                validate_name(name);  // Validate the name
+                std::cout << "Valid name: " << name << std::endl;
+            } catch (const std::runtime_error& e) {
+                std::cerr << e.what() << std::endl;
+                return 1;  // Exit with error
+            } 
             role = "Guest";
         } else {
             if (logBool) {
@@ -159,6 +203,7 @@ int main(int argc, char* argv[]) {
             }
             log_file = argv[i];
             logBool = true;
+            validate_logname(log_file); 
         }
     }
 
