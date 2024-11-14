@@ -224,6 +224,7 @@ def process_args(args=None):
     if args.S:
         employees, guests, rooms = read_state(log_path, key)
         print_state(employees, guests, rooms)
+        return
 
     if args.T:
         if args.E:
@@ -235,6 +236,7 @@ def process_args(args=None):
             return
         if total_time > 0:
             print(total_time)
+            return
 
     if args.R:
         if args.E:
@@ -245,6 +247,7 @@ def process_args(args=None):
             print("Error: Specify either -E for employee or -G for guest.")
             return
         print(",".join(sorted(set(rooms_visited), key=int)))
+        return
 
     if args.I:
         names = []
@@ -257,6 +260,10 @@ def process_args(args=None):
             return
         common_rooms = list_common_rooms(log_path, names, key)
         print(",".join(common_rooms))
+        return
+    
+    print("Invalid command")
+    return
 
 if __name__ == "__main__":
     process_args()
