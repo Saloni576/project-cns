@@ -27,11 +27,15 @@ def load_hashed_password(log_path):
 
 # Function to authenticate the log based on the token
 def authenticate(log_path, auth_token):
-    hashed_password = load_hashed_password(log_path)
-    if bcrypt.checkpw(auth_token.encode(), hashed_password):
-        return True
-    else:
-        print("Authentication failed: Incorrect token.")
+    try:
+        hashed_password = load_hashed_password(log_path)
+        if bcrypt.checkpw(auth_token.encode(), hashed_password):
+            return True
+        else:
+            print("Authentication failed: Incorrect token.")
+            return False
+    except ValueError as e:
+        print(f"Authentication failed: {e}")
         return False
 
 # Function to decrypt a log entry
