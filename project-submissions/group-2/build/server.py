@@ -4,9 +4,13 @@ import threading
 import os
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
+import shlex
 
 MAX_CLIENTS = 5
 client_semaphore = threading.Semaphore(MAX_CLIENTS)
+
+# Define allowed command prefixes
+ALLOWED_COMMAND_PREFIXES = ["./setup", "./logappend", "./logread"]
 
 # Function to generate RSA key pair
 def generate_keys():
@@ -50,7 +54,6 @@ else:
         )
     print("Loaded existing RSA key pair from files.")
 
-
 # Send the public key to the client
 def send_public_key(conn):
     with open("public_key.pem", "rb") as pub_key_file:
@@ -61,12 +64,10 @@ def send_public_key(conn):
 def handle_client(conn, addr):
     print(f"Connected by {addr}")
     with conn:
-        # Send the public key file to the client
         send_public_key(conn)
         
         while True:
             try:
-                # Receive and decrypt the command
                 encrypted_command = conn.recv(256)
                 if not encrypted_command:
                     print(f"Client {addr} disconnected")
@@ -81,24 +82,49 @@ def handle_client(conn, addr):
                     )
                 ).decode()
                 print(f"Received command from {addr}: {command}")
-                
+
                 if command.lower() == 'exit':
                     break
 
-                # Execute the command and capture the output
+                # Split command using shlex for safer parsing and validate it
+                parts = shlex.split(command)
+                base_command = parts[0] if parts else ""
+
+                # Check if base command is allowed and if arguments are valid
+                if base_command in ALLOWED_COMMAND_PREFIXES:
+                    if base_command == './setup' and len(parts) == 3:
+                        # Example validation for './setup secret log1'
+                        # Only allow './setup' followed by two arguments
+                        validated_command = parts
+                    elif base_command == './logappend' and len(parts) >= 3:
+                        # Example validation for './logappend' with required arguments
+                        validated_command = parts
+                    elif base_command == './logread' and len(parts) >= 2:
+                        # Example validation for './logread' with required arguments
+                        validated_command = parts
+                    else:
+                        response = "Error: Invalid command format."
+                        conn.sendall(response.encode())
+                        continue
+                else:
+                    response = "Error: Command not allowed."
+                    conn.sendall(response.encode())
+                    continue
+
+                # Execute the validated command securely
                 try:
-                    output = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
+                    output = subprocess.check_output(validated_command, stderr=subprocess.STDOUT)
                     response = output.decode()
                 except subprocess.CalledProcessError as e:
                     response = e.output.decode()
 
-                # Send the response unencrypted
                 conn.sendall(response.encode())
             except ConnectionResetError:
                 print(f"Connection with {addr} was reset by the client.")
                 break
     print(f"Connection with {addr} closed")
     client_semaphore.release()
+
 
 def main():
     host = '10.7.23.164'
