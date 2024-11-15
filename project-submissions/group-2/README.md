@@ -6,8 +6,11 @@
 
 ### If not build already, run 'make build' first.
 
-## Run server.py in the server machine. (User your server ip)
-## Run client.py in the client machine to connect to the server. (Update your server ip in the client.py file) (Clients only need the client.py file in their machines.)
+## Run " python3 server.py ip_add port_no " in the server machine.
+(User your server ip and port, If not provided default ip and port will be used. Default ip: 127.0.0.1, Default port: 12345)
+
+## Run " python3 client.py ip_add port_no " in the client machine to connect to the server.
+(Default ip: 127.0.0.1, Default port: 12345) (Clients only need the client.py file in their machines.)
 
 ## After Connection, Clients can execute the commands from their machine.
 
