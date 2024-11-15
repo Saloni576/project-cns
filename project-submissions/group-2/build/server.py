@@ -1,10 +1,12 @@
-import socket
-import subprocess
-import threading
 import os
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.primitives import serialization, hashes
+import re
+import sys
 import shlex
+import socket
+import threading
+import subprocess
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
 
 MAX_CLIENTS = 5
 client_semaphore = threading.Semaphore(MAX_CLIENTS)
@@ -81,7 +83,7 @@ def handle_client(conn, addr):
                         label=None
                     )
                 ).decode()
-                print(f"Received command from {addr}: {command}")
+                print(f"Received command from {addr}")
 
                 if command.lower() == 'exit':
                     break
@@ -125,21 +127,54 @@ def handle_client(conn, addr):
     print(f"Connection with {addr} closed")
     client_semaphore.release()
 
+# Define a regex pattern to validate IPv4 addresses
+IPV4_PATTERN = r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$"
+
+def is_valid_ip(ip):
+    """Validate IPv4 address."""
+    if re.match(IPV4_PATTERN, ip):
+        return all(0 <= int(part) <= 255 for part in ip.split('.'))
+    return False
+
+def is_valid_port(port):
+    """Validate port number."""
+    return port.isdigit() and 1 <= int(port) <= 65535
 
 def main():
-    host = '10.7.23.164'
+    # Default IP and port
+    host = '127.0.0.1'
     port = 12345
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-        server_socket.bind((host, port))
-        server_socket.listen()
-        print(f"Server listening on {host}:{port}")
+    # Override with command-line arguments if provided and validate them
+    if len(sys.argv) >= 2:
+        if is_valid_ip(sys.argv[1]):
+            host = sys.argv[1]
+        else:
+            print("Error: Invalid IP address format.")
+            sys.exit(1)
+    if len(sys.argv) == 3:
+        if is_valid_port(sys.argv[2]):
+            port = int(sys.argv[2])
+        else:
+            print("Error: Invalid port number. Must be an integer between 1 and 65535.")
+            sys.exit(1)
+    elif len(sys.argv) > 3:
+        print("Usage: python3 server.py [<ip> <port>]")
+        sys.exit(1)
 
-        while True:
-            client_semaphore.acquire()
-            conn, addr = server_socket.accept()
-            client_thread = threading.Thread(target=handle_client, args=(conn, addr))
-            client_thread.start()
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+            server_socket.bind((host, port))
+            server_socket.listen()
+            print(f"Server listening on {host}:{port}")
+
+            while True:
+                client_semaphore.acquire()
+                conn, addr = server_socket.accept()
+                client_thread = threading.Thread(target=handle_client, args=(conn, addr))
+                client_thread.start()
+    except KeyboardInterrupt:
+        print("\nServer shut down gracefully.")
 
 if __name__ == "__main__":
     main()
