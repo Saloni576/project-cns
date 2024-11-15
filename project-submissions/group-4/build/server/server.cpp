@@ -894,6 +894,10 @@ void handle_logappend(const json& log_data, ssl::stream<tcp::socket>& ssl_stream
         std::string room_id = log_data.at("room_id");
         std::string log_file = log_data.at("log_name");
         std::string token = log_data.at("token");
+        if(action != "Arrival" && action != "Leaving"){
+            std::cerr << "Invalid action!" << std::endl;
+            throw std::runtime_error("Invalid action");
+        }
         if(timestamp[0] )
             // Validate timestamp is a non-negative integer within range
             for (char c : timestamp) {
