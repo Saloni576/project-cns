@@ -20,10 +20,15 @@
 const char* CERT_FILE = "server.crt";
 const char* KEY_FILE = "server.key";
 const char* CA_FILE = "ca.crt";
-
+const std::regex ACCOUNT_PATTERN("^([a-z0-9_.-]{1,122})$");
 std::mutex authFileMutex;
 std::map<std::string, double> accountBalances;
 std::map<std::string, std::string> accountPins;
+
+bool isValidAccountName(const std::string& account) {
+    return std::regex_match(account, ACCOUNT_PATTERN);
+    //  && account != "." && account != "..";
+}
 
 int PORT = 3000; // Default port
 std::string authFileName = "bank.auth"; // Default auth file name
@@ -299,6 +304,10 @@ void handleClient(SSL* ssl) {
 
     std::string operation = requestJson["operation"].asString();
     std::string account = requestJson["account"].asString();
+    if (!isValidAccountName(account)) {
+        sendErrorResponse(ssl, "Invalid account name");
+        return;
+    }
 
     Json::Value responseJson;
 
