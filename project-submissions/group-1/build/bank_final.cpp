@@ -14,6 +14,22 @@
 #include <chrono>  // For timestamps
 #include <iomanip> // For formatting the timestamp
 
+#include <iostream>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/sha.h>
+#include <string>
+#include <unistd.h>
+#include <fstream>
+#include <arpa/inet.h>
+#include <sstream>
+#include <regex>
+#include <cstring>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <limits>
+#include <iomanip>
+
 using namespace std;
 
 // Globals
@@ -34,6 +50,40 @@ std::string generate_random_key(size_t length) {
     }
     return result;
 }
+
+bool validate_username(const std::string &username)
+{
+    // Check the length of the username
+    if (username.length() < 1 || username.length() > 122)
+    {
+        return false;
+    }
+
+    // Check if the username matches the allowed character pattern
+    std::regex pattern(R"(^([a-z0-9._-]+)$)");
+    if (std::regex_match(username, pattern))
+    {
+        return true;
+    }
+
+    return false;
+}
+const double MAX_AMOUNT = 4294967295.99; // Maximum allowed amount
+// Function to validate currency input as whole and fractional parts
+bool isValidAmount(double input1)
+{   
+    std::string input= std::to_string(input1);
+    std::regex pattern("^(0|[1-9][0-9]*)\\.([0-9]{2})$");
+    if (!std::regex_match(input, pattern))
+    {
+        return false;
+    }
+
+    // Check if the amount is within the valid range [0.00, 4294967295.99]
+    double amount = std::stod(input);
+    return amount > 0.00 && amount <= MAX_AMOUNT;
+}
+
 string get_transactions(const string &username)
 {
     ifstream file("transaction_log.csv");
@@ -273,6 +323,12 @@ void handle_client_request(SSL *ssl)
             { // Ensure the initial deposit is greater than $10
                 response = " 255 - Initial deposit must be greater than/ equal to $10!";
             }
+            else if(!validate_username(username)){
+                response = " Bank side 255 - Invalid username!";
+            }
+            else if(!isValidAmount(initial_balance)){
+                response = " Bank Side 255 - Invalid amount! Please enter a valid amount in the format: whole.fractional (e.g., 123.45) and within bounds (0.00, 4294967295.99].";
+            }
             else
             {
                 user_database[username] = hashed_password;
@@ -289,7 +345,10 @@ void handle_client_request(SSL *ssl)
             ss >> username >> hashed_password;
 
             lock_guard<mutex> lock(db_mutex);
-            if (user_database.find(username) != user_database.end() && user_database[username] == hashed_password)
+            if(!validate_username){
+                response = " Bank Side 255 - Invalid username!";
+            }
+            else if (user_database.find(username) != user_database.end() && user_database[username] == hashed_password)
             {
                 string sessionID = createSession(username);
                 response = "Login successful! SessionID: " + sessionID;
@@ -327,8 +386,10 @@ void handle_client_request(SSL *ssl)
             string session_id;
             double amount;
             ss >> session_id >> amount;
-
-            if (validate_session(session_id))
+            if(!isValidAmount(amount)){
+                response = " Bank giving 255 - Invalid amount! Please enter a valid amount in the format: whole.fractional (e.g., 123.45) and within bounds (0.00, 4294967295.99].";
+            }
+            else if (validate_session(session_id))
             {
                 lock_guard<mutex> lock(db_mutex);
                 string username = active_sessions[session_id];
@@ -354,7 +415,11 @@ void handle_client_request(SSL *ssl)
             double amount;
             ss >> session_id >> amount;
 
-            if (validate_session(session_id))
+            if(!isValidAmount(amount)){
+                response = " Bank giving 255 - Invalid amount! Please enter a valid amount in the format: whole.fractional (e.g., 123.45) and within bounds (0.00, 4294967295.99].";
+            }
+
+            else if (validate_session(session_id))
             {
                 lock_guard<mutex> lock(db_mutex);
                 string username = active_sessions[session_id];
@@ -502,7 +567,6 @@ int main()
     EVP_cleanup();
     return 0;
 }
-
 
 
 
