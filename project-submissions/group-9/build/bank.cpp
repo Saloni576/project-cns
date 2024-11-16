@@ -16,6 +16,7 @@
 #include <filesystem> // For checking file existence
 #include "secret_key.h" // Include the header file with the secret key
 #include "encryption.h"
+#include <set>
 
 const char* CERT_FILE = "server.crt";
 const char* KEY_FILE = "server.key";
@@ -36,9 +37,12 @@ std::string authFileName = "bank.auth"; // Default auth file name
 const std::regex FILENAME_PATTERN("^(?!\\.{1,2}$)[_\\-.0-9a-z]{1,127}$");
 
 // Function declarations
+void saveAccountBalancesToFile(const std::string& fileName);
+void loadAccountBalancesFromFile(const std::string& fileName);
+void loadAccountPinsFromFile(const std::string& fileName);
 std::string generateHMAC(const std::string& message);
 bool verifyHMAC(const std::string& message, const std::string& receivedHmac);
-void readAuthFile(const std::string& authFile);
+// void readAuthFile(const std::string& authFile);
 bool createAccount(const std::string& accountNumber, double initialBalance, const std::string& pin);
 bool verifyPin(const std::string& accountNumber, const std::string& inputPin, std::string accountName);
 SSL_CTX* InitServerCTX();
@@ -86,6 +90,58 @@ int main(int argc, char* argv[]) {
         std::cerr << "Error: Unable to create auth file." << std::endl;
         return 255; // Exit on failure to create file
     }
+
+    // new part
+    // List of files to exclude
+    std::set<std::string> excludeFiles = {
+        "atm", "atm.cpp", "bank", "bank.cpp", "bank.data", "ca.crt", "client.crt", "client.key",
+        "encryption.cpp", "encryption.h", "Makefile", "secret_key.h",
+        "server.crt", "server.key", "tr", "tr.cpp", authFileName
+    };
+    // std::set<std::string> excludeFiles = {
+    //     "atm", "bank", "ca", "client",
+    //     "encryption", "Makefile", "secret_key",
+    //     "server", "tr", authFileName
+    // };
+
+    // Iterate over all files in the current directory
+    for (const auto& entry : std::filesystem::directory_iterator(".")) {
+        if (entry.is_regular_file()) {
+            // Get the filename without the extension
+            std::string fileName = entry.path().string().substr(2);
+            // std::cout << fileName << std::endl;
+
+            // Skip files if their base name is in the exclude list
+            if (excludeFiles.find(fileName) != excludeFiles.end()) {
+                continue;
+            }
+
+            // Get the full path of the file to process
+            std::string filePath = entry.path().string();
+            // std::cout << filePath << std::endl;
+
+            // Decrypt the file
+            decryptFile(filePath);
+
+            // Read account details from the file (assuming it follows the .card file format)
+            std::pair<std::string, std::string> accountData = readCardFile(filePath);
+            std::string accountName = accountData.first;
+            std::string pin = accountData.second;
+
+            // Re-encrypt the file after reading
+            encryptFile(filePath);
+
+            // Validate the account data before adding to auth file
+            if (!accountName.empty() && !pin.empty() && isValidAccountName(accountName)) {
+                // Write to auth file in "account,pin" format
+                authFile << accountName << "," << pin << std::endl;
+            }
+        }
+    }
+    decryptFile("bank.data");
+    loadAccountBalancesFromFile("bank.data");
+    encryptFile("bank.data");
+    loadAccountPinsFromFile(authFileName);
     encryptFile(authFileName);
     authFile.close();
     std::cout << "created" << std::endl; // Print confirmation
@@ -181,22 +237,22 @@ bool verifyHMAC(const std::string& message, const std::string& receivedHmac) {
     return computedHmac == receivedHmac;
 }
 
-void readAuthFile(const std::string& authFile) {
-    std::lock_guard<std::mutex> lock(authFileMutex);
-    std::ifstream infile(authFile);
-    std::string line;
+// void readAuthFile(const std::string& authFile) {
+//     std::lock_guard<std::mutex> lock(authFileMutex);
+//     std::ifstream infile(authFile);
+//     std::string line;
 
-    decryptFile(authFile);
+//     decryptFile(authFile);
 
-    while (std::getline(infile, line)) {
-        std::string accountNumber = line.substr(0, line.find(','));
-        std::string pin = line.substr(line.find(',') + 1);
-        accountPins[accountNumber] = pin; // Store the PIN
-        accountBalances[accountNumber] = 0.0; // Initialize balance to zero
-    }
+//     while (std::getline(infile, line)) {
+//         std::string accountNumber = line.substr(0, line.find(','));
+//         std::string pin = line.substr(line.find(',') + 1);
+//         accountPins[accountNumber] = pin; // Store the PIN
+//         accountBalances[accountNumber] = 0.0; // Initialize balance to zero
+//     }
 
-    encryptFile(authFile);
-}
+//     encryptFile(authFile);
+// }
 
 bool createAccount(const std::string& accountNumber, double initialBalance, const std::string& pin) {
     std::lock_guard<std::mutex> lock(authFileMutex);
@@ -220,6 +276,10 @@ bool createAccount(const std::string& accountNumber, double initialBalance, cons
     }
 
     encryptFile(authFileName);
+
+    decryptFile("bank.data");
+    saveAccountBalancesToFile("bank.data");
+    encryptFile("bank.data");
 
     std::cout << "Account " << accountNumber << " created successfully with initial balance: " << initialBalance << std::endl;
     return 1;
@@ -349,6 +409,9 @@ void handleClient(SSL* ssl) {
                     double amount = requestJson["amount"].asDouble();
                     // Update account balance logic
                     accountBalances[account] += amount; 
+                    decryptFile("bank.data");
+                    saveAccountBalancesToFile("bank.data");
+                    encryptFile("bank.data");
                     responseJson["status"] = "success";
                     responseJson["message"] = "Deposit successful.";
                 } else if (operation == "withdraw") {
@@ -356,6 +419,9 @@ void handleClient(SSL* ssl) {
                     // Withdrawal logic
                     if (accountBalances[account] >= amount) {
                         accountBalances[account] -= amount;
+                        decryptFile("bank.data");
+                        saveAccountBalancesToFile("bank.data");
+                        encryptFile("bank.data");
                         responseJson["status"] = "success";
                     } else {
                         responseJson["status"] = "failed";
@@ -426,4 +492,72 @@ int parseCommandLineArguments(int argc, char* argv[]) {
         }
     }
     return 0; // Indicate success
+}
+
+// Function to save accountBalances to bank.data
+// Function to save accountBalances to bank.data
+void saveAccountBalancesToFile(const std::string& fileName) {
+    std::ofstream file(fileName);  // Use fileName here to open the file
+    
+    if (!file) {  // Check if the file was opened successfully
+        std::cerr << "Error opening file for writing: " << fileName << std::endl;
+        return;
+    }
+    
+    // Iterate over the accountBalances map and write each key-value pair
+    for (const auto& account : accountBalances) {
+        file << account.first << "," << account.second << "\n";  // Write account number (key) and balance (value)
+    }
+    
+    file.close();  // Close the file after writing
+}
+
+// Function to read account balances from bank.data and store them in accountBalances
+void loadAccountBalancesFromFile(const std::string& fileName) {
+    std::ifstream file(fileName);  // Open the file for reading
+    
+    if (!file) {  // Check if the file was opened successfully
+        std::cerr << "Error opening file for reading: " << fileName << std::endl;
+        return;
+    }
+    
+    std::string line;
+    while (std::getline(file, line)) {  // Read the file line by line
+        size_t commaPos = line.find(',');  // Find the comma separating account number and balance
+        
+        if (commaPos != std::string::npos) {  // Ensure that a comma was found
+            std::string accountNumber = line.substr(0, commaPos);  // Extract account number
+            double balance = std::stod(line.substr(commaPos + 1));  // Extract balance and convert to double
+            
+            // Insert account number and balance into the map
+            accountBalances[accountNumber] = balance;
+        }
+    }
+    
+    file.close();  // Close the file after reading
+}
+
+// Function to read account pins from bank_pins.data and store them in accountPins
+void loadAccountPinsFromFile(const std::string& fileName) {
+    std::ifstream file(fileName);  // Open the file for reading
+    
+    if (!file) {  // Check if the file was opened successfully
+        std::cerr << "Error opening file for reading: " << fileName << std::endl;
+        return;
+    }
+    
+    std::string line;
+    while (std::getline(file, line)) {  // Read the file line by line
+        size_t commaPos = line.find(',');  // Find the comma separating account number and PIN
+        
+        if (commaPos != std::string::npos) {  // Ensure that a comma was found
+            std::string accountNumber = line.substr(0, commaPos);  // Extract account number
+            std::string pin = line.substr(commaPos + 1);  // Extract PIN
+            
+            // Insert account number and PIN into the map
+            accountPins[accountNumber] = pin;
+        }
+    }
+    
+    file.close();  // Close the file after reading
 }
