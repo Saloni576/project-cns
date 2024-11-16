@@ -16,7 +16,7 @@ ATM_SRC = atm.cpp encryption.cpp
 BANK_SRC = bank.cpp encryption.cpp
 
 # Files to clean
-CLEAN_FILES = *.card *.auth $(ATM) $(BANK)
+CLEAN_FILES = *.auth $(ATM) $(BANK)
 
 # Default target to build both executables
 all: $(ATM) $(BANK)
