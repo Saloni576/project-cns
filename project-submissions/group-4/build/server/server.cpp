@@ -867,7 +867,22 @@ public:
 
 mongocxx::pool* MongoDBHandler::pool = nullptr;
 mongocxx::pool* MongoDBHandler::person_pool = nullptr;
+void validate_name(const std::string& name) {
+    for (char ch : name) {
+        if (!std::isalpha(ch)) {  // Check if all characters are alphabetic
+            throw std::runtime_error("Error: Name must contain only alphabetic characters (a-z, A-Z) with no spaces.");
+        }
+    }
+}
 
+
+void validate_logname(const std::string& name) {
+    for (char ch : name) {
+        if (!std::isalnum(ch) && ch != '_') {  // Allow only alphanumeric and underscores
+            throw std::runtime_error("Error: Name must contain only alphanumeric characters (a-z, A-Z, 0-9) and underscores. Slashes and periods are not allowed as specified in the README. Please refer the repo for more details.");
+        }
+    }
+}
 // Function to handle log append requests
 void handle_logappend(const json& log_data, ssl::stream<tcp::socket>& ssl_stream) {
     try {
@@ -879,6 +894,53 @@ void handle_logappend(const json& log_data, ssl::stream<tcp::socket>& ssl_stream
         std::string room_id = log_data.at("room_id");
         std::string log_file = log_data.at("log_name");
         std::string token = log_data.at("token");
+        if(action != "Arrival" && action != "Leaving"){
+            std::cerr << "Invalid action!" << std::endl;
+            throw std::runtime_error("Invalid action");
+        }
+        if(timestamp[0] )
+            // Validate timestamp is a non-negative integer within range
+            for (char c : timestamp) {
+                if (!std::isdigit(static_cast<unsigned char>(c))) {
+                    std::cerr << "Invalid! Timestamp contains non-numeric characters" << std::endl;
+                    throw std::runtime_error("Invalid! Timestamp contains non-numeric characters");
+                    return;
+                }
+            }
+            long ts = std::stol(timestamp);
+            
+            if (ts < 1 || ts > 1073741823) {
+                std::cerr << "Invalid! Timestamp out of bounds" << std::endl;
+                throw std::runtime_error("Invalid! Timestamp out of bounds");
+                return;
+            }
+        for (char c : token) {
+                if (!isalnum(c)) {
+                    std::cerr << "Invalid! Token contains non-alphanumeric characters" << std::endl;
+                    throw std::runtime_error("Invalid! Token contains non-alphanumeric characters");
+                    return false;
+                }
+            }    
+        try {
+                for (char c : name) {
+                    if (!std::isalpha(static_cast<unsigned char>(c)) || c == '"') {
+                        std::cerr << "Invalid! Name contains non-alphabetic characters" << std::endl;
+                        throw std::runtime_error("Invalid! Name contains non-alphabetic characters");
+                        return 255;
+                    }
+                }
+                validate_name(name);  // Validate the name
+                std::cout << "Valid name: " << name << std::endl;
+            } catch (const std::runtime_error& e) {
+                std::cerr << e.what() << std::endl;
+                return 1;  // Exit with error
+            }  
+        if (room < 0 || room > 1073741823) {
+                std::cerr << "Invalid! Room ID out of bounds" << std::endl;
+                throw std::runtime_error("Invalid! Room ID out of bounds");
+                return false;
+            }     
+        validate_logname(log_file);     
         MongoDBHandler db_handler(log_file);
         if (!db_handler.validate_log_token(log_file, token)) {
             std::cerr << "Invalid authentication!" << std::endl;
@@ -941,6 +1003,19 @@ std::string handle_logread(const json& log_data, ssl::stream<tcp::socket>& ssl_s
         std::string log_file = log_data.at("log_name");
         std::string token = log_data.at("token");
         std::string query_type = log_data.at("query_type");
+        validate_logname(log_file);
+        for (char c : token) {
+                if (!isalnum(c)) {
+                    std::cerr << "Invalid! Token contains non-alphanumeric characters" << std::endl;
+                    throw std::runtime_error("Invalid! Token contains non-alphanumeric characters");
+                    return false;
+                }
+            }
+
+        if(query_type != "state" && query_type != "room" && query_type != "time") {
+            std::cerr << "Invalid query type!" << std::endl;
+            throw std::runtime_error("Invalid query type");
+        }
         MongoDBHandler db_handler(log_file);
     if (!db_handler.validate_log_token(log_file, token)) {
         std::cerr << "Invalid authentication!" << std::endl;
@@ -993,6 +1068,7 @@ std::string handle_logread(const json& log_data, ssl::stream<tcp::socket>& ssl_s
     }
     return "";
 }
+
 
 // Function to handle HTTPS requests from clients
 void handle_request(ssl::stream<tcp::socket>& ssl_stream) {
