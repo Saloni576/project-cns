@@ -278,48 +278,61 @@ private:
 
     public:
         // Constructor: Initializes the SecureLogManager with a log file and token
-        SecureLogManager(const std::string& file, const std::string& userToken) : logFile(file), token(userToken) {
+        SecureLogManager(const std::string& file, const std::string& userToken, long initialTimestamp) : logFile(file), token(userToken) {
             // Generate a random salt
             std::ifstream existingFile(logFile, std::ios::binary);
-                if (existingFile) {
-                    // File exists, read the salt
-                    existingFile.read(reinterpret_cast<char*>(salt), sizeof(salt));
-                    existingFile.close();
-                    
-                } else {
-                    // New file, generate a new salt
-                    RAND_bytes(salt, sizeof(salt));
-                   
-                }
-                
-                
+            bool isFirstAppend = false; // Flag to indicate if this is the first time logappend is being used
 
-                std::memset(iv, 0, sizeof(iv));
-                
-                deriveKey();
-                
-                if (!existingFile) {
-                    // For a new file, we need to write the salt immediately
-                    std::ofstream newFile(logFile, std::ios::binary);
-                    if (newFile) {
-                        newFile.write(reinterpret_cast<const char*>(salt), sizeof(salt));
-                        newFile.close();
-                    } 
-                }
-            
-            if (!readAndDecryptLog()) {
-                        // If reading fails, initialize with empty data
-                        events.clear();
-                        inCampus.clear();
-                        currentRoom.clear();
-                        validToken = token;
+            if (existingFile) {
+                // File exists, read the salt
+                existingFile.read(reinterpret_cast<char*>(salt), sizeof(salt));
 
-                        // Generate a new salt for future use
-                        RAND_bytes(salt, sizeof(salt));
+                // Check if there is any content after the salt
+                existingFile.seekg(0, std::ios::end);
+                std::streampos fileSize = existingFile.tellg();
+                
+                if (fileSize > static_cast<std::streampos>(sizeof(salt))) {
+                    // If there is content beyond the salt, raise an error
+                    if (initialTimestamp == 1) {
+                        std::cerr << "invalid" << std::endl;
+                        exit(255);  // Exit with an error code
+                    }
+                }
+                else {
+                    isFirstAppend = true;  // This is the first append to a new file
+                }
+
+                existingFile.close();
+            } else {
+                // New file, generate a new salt
+                RAND_bytes(salt, sizeof(salt));
+                isFirstAppend = true;  // This is the first append to a new file
             }
-            
 
+            std::memset(iv, 0, sizeof(iv));
+            deriveKey();
+
+            if (isFirstAppend) {
+                // For a new file, write the salt immediately
+                std::ofstream newFile(logFile, std::ios::binary);
+                if (newFile) {
+                    newFile.write(reinterpret_cast<const char*>(salt), sizeof(salt));
+                    newFile.close();
+                }
+            }
+
+            if (!readAndDecryptLog()) {
+                // If reading fails, initialize with empty data
+                events.clear();
+                inCampus.clear();
+                currentRoom.clear();
+                validToken = token;
+
+                // Generate a new salt for future use
+                RAND_bytes(salt, sizeof(salt));
+            }
         }
+
         // Appends a new entry to the log
 
         bool appendEntry(const Event& event) {
@@ -523,7 +536,7 @@ private:
                 continue;
             }
 
-            SecureLogManager manager(logFile, token);
+            SecureLogManager manager(logFile, token, timestamp);
             Event event(timestamp, token, name, isEmployee, isArrival, roomId);
             if (!manager.appendEntry(event)) {
                 std::cout << "invalid" << std::endl;
@@ -649,7 +662,7 @@ int main(int argc, char* argv[]) {
             return 255;
         }
 
-        SecureLogManager manager(logFile, token);
+        SecureLogManager manager(logFile, token, timestamp);
         Event event(timestamp, token, name, isEmployee, isArrival, roomId);
         if (!manager.appendEntry(event)) {
             std::cout << "invalid" << std::endl;
