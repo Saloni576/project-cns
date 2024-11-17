@@ -115,7 +115,7 @@ bool isValidAmount(const std::string &input)
 
     // Check if the amount is within the valid range [0.00, 4294967295.99]
     double amount = std::stod(input);
-    return amount > 0.00 && amount <= MAX_AMOUNT;
+    return amount > 0.00 && amount <= MAX_AMOUNT; //amount > 0.00 && amount <= MAX_AMOUNT
 }
 
 // std::string read_auth_file(const std::string &filename) {
@@ -365,13 +365,13 @@ int main()
                     initial_balance = std::stod(initial_balance_str);
 
                     // Note: We are not validating if initial_balance > 10, assuming the bank does this
-                } while (!isValidAmount(initial_balance_str)); // Only check if the format is valid
+                } while (!isValidAmount(initial_balance_str)); // Only check if the format is valid  !isValidAmount(initial_balance_str)
 
                 std::string hashed_password = hash_password(password);
 
                 if (SSL_write(ssl, "REGISTER", 8) <= 0 ||
-                    SSL_write(ssl, (username + " " + hashed_password + " " + std::to_string(initial_balance)).c_str(),
-                              (username + " " + hashed_password + " " + std::to_string(initial_balance)).size()) <= 0)
+                    SSL_write(ssl, (username + " " + hashed_password + " " + initial_balance_str).c_str(),
+                              (username + " " + hashed_password + " " + initial_balance_str).size()) <= 0)
                 {
                     std::cerr << "Server disconnected. Exiting..." << std::endl;
                     exit(63);
@@ -502,7 +502,7 @@ int main()
                             std::string amount;
                             std::cout << "Enter amount to deposit: ";
                             std::cin >> amount;
-                            if (!isValidAmount(amount))
+                            if (!isValidAmount(amount)) //!isValidAmount(amount)
                             {
                                 std::cout << "255- Invalid amount! Please enter a valid amount in the format: whole.fractional (e.g., 123.45) and within bounds (0.00, 4294967295.99]." << std::endl;
                                 continue;
@@ -534,7 +534,7 @@ int main()
                             std::string amount;
                             std::cout << "Enter amount to withdraw: ";
                             std::cin >> amount;
-                            if (!isValidAmount(amount))
+                            if (!isValidAmount(amount)) //!isValidAmount(amount)
                             {
                                 std::cout << "Invalid amount! Please enter a valid amount in the format: whole.fractional (e.g., 123.45) and within bounds (0.00, 4294967295.99]." << std::endl;
                                 continue;
