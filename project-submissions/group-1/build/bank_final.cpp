@@ -29,6 +29,12 @@
 #include <unistd.h>
 #include <limits>
 #include <iomanip>
+#include <cmath>
+#include <iomanip>
+#include <sstream>
+#include <limits>
+#include <string>
+#include <iostream>
 
 using namespace std;
 
@@ -68,11 +74,10 @@ bool validate_username(const std::string &username)
 
     return false;
 }
-const double MAX_AMOUNT = 4294967295.99; // Maximum allowed amount
-// Function to validate currency input as whole and fractional parts
-bool isValidAmount(double input1)
-{   
-    std::string input= std::to_string(input1);
+
+const double MAX_AMOUNT = 4294967295.99;
+bool isValidAmount(const std::string &input)
+{
     std::regex pattern("^(0|[1-9][0-9]*)\\.([0-9]{2})$");
     if (!std::regex_match(input, pattern))
     {
@@ -81,8 +86,55 @@ bool isValidAmount(double input1)
 
     // Check if the amount is within the valid range [0.00, 4294967295.99]
     double amount = std::stod(input);
-    return amount > 0.00 && amount <= MAX_AMOUNT;
+    return amount > 0.00 && amount <= MAX_AMOUNT; //amount > 0.00 && amount <= MAX_AMOUNT
 }
+
+// //
+
+
+// const double MAX_AMOUNT = 4294967295.99; // Define the maximum amount as per your requirement
+
+// bool isValidAmount(double value)
+// {
+//     // Check bounds
+//     if (value <= 0.00 || value > MAX_AMOUNT)
+//     {
+//         return false; // Amount is out of bounds
+//     }
+
+//     // Convert the double to a string with fixed two decimal places
+//     std::ostringstream stream;
+//     stream << std::fixed << std::setprecision(2) << value;
+//     std::string formattedValue = stream.str();
+
+//     // Check for leading zeros in the integer part (not allowed unless it's exactly 0)
+//     size_t dotPos = formattedValue.find('.');
+//     std::string integerPart = formattedValue.substr(0, dotPos);
+
+//     // The only valid case with leading zeros is "0.00", so we reject others
+//     if (integerPart.length() > 1 && integerPart[0] == '0')
+//     {
+//         return false; // Leading zeros are not allowed unless the number is 0.00
+//     }
+
+//     // Verify that the string representation has exactly two decimal places
+//     size_t decimalLength = formattedValue.size() - dotPos - 1;
+//     if (decimalLength != 2)
+//     {
+//         return false; // Doesn't have exactly two decimal places
+//     }
+
+//     // Check if the value was correctly formatted with two decimals (e.g., 10.90 not 10.9 or 10.897)
+//     double roundedAmount = std::round(value * 100.0) / 100.0;
+//     if (roundedAmount != value)
+//     {
+//         return false; // The value is not accurately represented with two decimal places
+//     }
+
+//     return true; // Valid amount
+// }
+
+// //
 
 string get_transactions(const string &username)
 {
@@ -311,30 +363,35 @@ void handle_client_request(SSL *ssl)
             SSL_read(ssl, buffer, sizeof(buffer));
             stringstream ss(buffer);
             string username, hashed_password;
-            double initial_balance;
+            string initial_balance;
             ss >> username >> hashed_password >> initial_balance; // Read initial balance
+            
+
+            double amount_double;
+            amount_double = std::stod(initial_balance);
 
             lock_guard<mutex> lock(db_mutex);
-            if (user_database.find(username) != user_database.end())
+            if(!isValidAmount(initial_balance)){
+                
+                response = " Bank side 255 - Invalid amount! Please enter a valid amount in the format: whole.fractional (e.g., 123.45) and within bounds (0.00, 4294967295.99].";
+            }
+            else if (user_database.find(username) != user_database.end())
             {
                 response = " 255 - Username already exists!";
             }
-            else if (initial_balance < 10.0)
+            else if (amount_double < 10.0)
             { // Ensure the initial deposit is greater than $10
                 response = " 255 - Initial deposit must be greater than/ equal to $10!";
             }
             else if(!validate_username(username)){
                 response = " Bank side 255 - Invalid username!";
             }
-            else if(!isValidAmount(initial_balance)){
-                response = " Bank Side 255 - Invalid amount! Please enter a valid amount in the format: whole.fractional (e.g., 123.45) and within bounds (0.00, 4294967295.99].";
-            }
             else
             {
                 user_database[username] = hashed_password;
-                user_balances[username] = initial_balance; // Set the user's initial balance
+                user_balances[username] = amount_double; // Set the user's initial balance
                 response = "Registration successful!";
-                saveUserToDatabase(username, hashed_password, initial_balance, "user_database.csv");
+                saveUserToDatabase(username, hashed_password, amount_double, "user_database.csv");
             }
         }
         else if (command == "LOGIN")
@@ -343,12 +400,12 @@ void handle_client_request(SSL *ssl)
             stringstream ss(buffer);
             string username, hashed_password;
             ss >> username >> hashed_password;
-
-            lock_guard<mutex> lock(db_mutex);
-            if(!validate_username){
+            if(!validate_username(username)){
                 response = " Bank Side 255 - Invalid username!";
             }
-            else if (user_database.find(username) != user_database.end() && user_database[username] == hashed_password)
+            lock_guard<mutex> lock(db_mutex);
+            
+            if (user_database.find(username) != user_database.end() && user_database[username] == hashed_password)
             {
                 string sessionID = createSession(username);
                 response = "Login successful! SessionID: " + sessionID;
@@ -384,8 +441,12 @@ void handle_client_request(SSL *ssl)
             SSL_read(ssl, buffer, sizeof(buffer));
             stringstream ss(buffer);
             string session_id;
-            double amount;
+            string amount;
             ss >> session_id >> amount;
+
+            double amount_double;
+            amount_double = std::stod(amount);
+
             if(!isValidAmount(amount)){
                 response = " Bank giving 255 - Invalid amount! Please enter a valid amount in the format: whole.fractional (e.g., 123.45) and within bounds (0.00, 4294967295.99].";
             }
@@ -393,14 +454,14 @@ void handle_client_request(SSL *ssl)
             {
                 lock_guard<mutex> lock(db_mutex);
                 string username = active_sessions[session_id];
-                user_balances[username] += amount;
+                user_balances[username] += amount_double;
                 stringstream amount_stream, balance_stream;
-                amount_stream << fixed << setprecision(2) << amount; // Format amount
+                amount_stream << fixed << setprecision(2) << amount_double; // Format amount
                 balance_stream << fixed << setprecision(2) << user_balances[username]; // Format new balance
                 response = "Deposited $" + amount_stream.str() + ". New balance: $" + balance_stream.str();
                 //response = "Deposited $" + to_string(amount) + ". New balance: $" + to_string(user_balances[username]);
                 updateuser_database("user_database.csv");
-                log_transaction(username, "DEPOSIT", amount);
+                log_transaction(username, "DEPOSIT", amount_double);
             }
             else
             {
@@ -412,27 +473,32 @@ void handle_client_request(SSL *ssl)
             SSL_read(ssl, buffer, sizeof(buffer));
             stringstream ss(buffer);
             string session_id;
-            double amount;
+            string amount;
             ss >> session_id >> amount;
 
+
+            double amount_double;
+            amount_double = std::stod(amount);
+
             if(!isValidAmount(amount)){
+
                 response = " Bank giving 255 - Invalid amount! Please enter a valid amount in the format: whole.fractional (e.g., 123.45) and within bounds (0.00, 4294967295.99].";
             }
 
-            else if (validate_session(session_id))
+            else if (validate_session(session_id) )
             {
                 lock_guard<mutex> lock(db_mutex);
                 string username = active_sessions[session_id];
-                if (user_balances[username] >= amount)
+                if (user_balances[username] >= amount_double)
                 {
-                    user_balances[username] -= amount;
+                    user_balances[username] -= amount_double;
                     stringstream amount_stream, balance_stream;
-                    amount_stream << fixed << setprecision(2) << amount; // Format amount
+                    amount_stream << fixed << setprecision(2) << amount_double; // Format amount
                     balance_stream << fixed << setprecision(2) << user_balances[username]; // Format new balance
                     response = "Withdrew $" + amount_stream.str() + ". New balance: $" + balance_stream.str();
                     //response = "Withdrew $" + to_string(amount) + ". New balance: $" + to_string(user_balances[username]);
                     updateuser_database("user_database.csv");
-                    log_transaction(username, "WITHDRAW", amount);
+                    log_transaction(username, "WITHDRAW", amount_double);
                 }
                 else
                 {
