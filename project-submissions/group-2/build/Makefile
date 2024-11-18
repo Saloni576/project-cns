@@ -35,3 +35,4 @@ clean:
 	rm -f secret.key dummy_logfile
 	rm -f logappend logread setup
 	rm -f log[0-9]*
+	rm -f *.pem
