@@ -237,6 +237,7 @@ bool verifyHMAC(const std::string& message, const std::string& receivedHmac) {
     return computedHmac == receivedHmac;
 }
 
+
 // void readAuthFile(const std::string& authFile) {
 //     std::lock_guard<std::mutex> lock(authFileMutex);
 //     std::ifstream infile(authFile);
@@ -364,6 +365,11 @@ void handleClient(SSL* ssl) {
 
     std::string operation = requestJson["operation"].asString();
     std::string account = requestJson["account"].asString();
+    std::string authFile = requestJson["authFile"].asString();
+    if (authFile != authFileName) {
+        sendErrorResponse(ssl, "Invalid authFile");
+        return;
+    }
     if (!isValidAccountName(account)) {
         sendErrorResponse(ssl, "Invalid account name");
         return;
