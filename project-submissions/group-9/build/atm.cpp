@@ -240,6 +240,7 @@ int main(int argc, char* argv[]) {
             request["operation"] = operation;
             request["pin"] = pin; // Include the cardFile for corresponding account
             request["amount"] = amount; // Include initial amount
+            request["authFile"] = authFile;
 
             // Generate HMAC
             std::string messageForHMAC = Json::writeString(Json::StreamWriterBuilder(), request);
@@ -281,6 +282,8 @@ int main(int argc, char* argv[]) {
         if (operation == "deposit" || operation == "withdraw") {
             request["amount"] = amount;
         }
+
+        request["authFile"] = authFile;
 
         // Generate HMAC
         std::string messageForHMAC = Json::writeString(Json::StreamWriterBuilder(), request);
